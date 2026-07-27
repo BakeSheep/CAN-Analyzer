@@ -1,0 +1,27 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+dist-ssr
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local captures must never be committed
+*.CSV
+*.csv
+!tests/**/*.csv
