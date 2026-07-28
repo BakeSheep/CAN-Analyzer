@@ -137,7 +137,13 @@ export function analyzeCaptureText(
       samplesPerBit,
       invertPolarity: !preferred,
     })
-    if (decodeScore(oppositeOutcome) > decodeScore(preferredOutcome)) {
+    // Switch only when the opposite polarity produces strictly better
+    // results AND at least one fully valid frame: junk frames from a
+    // wrong polarity must never beat “no frames found”.
+    if (
+      countValidFrames(oppositeOutcome) > 0 &&
+      decodeScore(oppositeOutcome) > decodeScore(preferredOutcome)
+    ) {
       invertPolarity = !preferred
       outcome = oppositeOutcome
       warnings.push(
@@ -170,13 +176,30 @@ export function analyzeCaptureText(
   return { result, overview: buildOverview(capture, OVERVIEW_BUCKETS) }
 }
 
-/** Rank a decode outcome: fully valid frames dominate, errors penalize. */
-function decodeScore(outcome: DecodeOutcome): number {
+/** Count frames with a valid CRC and no frame-level errors. */
+function countValidFrames(outcome: DecodeOutcome): number {
   let valid = 0
   for (const frame of outcome.frames) {
     if (frame.crcValid && frame.errors.length === 0) valid += 1
   }
-  return valid * 100 + outcome.frames.length * 10 - outcome.errors.length
+  return valid
+}
+
+/**
+ * Rank a decode outcome for polarity confirmation. Only fully valid
+ * frames earn points; invalid frames, their frame-level errors, and
+ * capture-level errors all penalize, so a wrong polarity that produces
+ * junk frames scores below an outcome with no frames at all.
+ */
+export function decodeScore(outcome: DecodeOutcome): number {
+  let score = countValidFrames(outcome) * 100
+  for (const frame of outcome.frames) {
+    if (!frame.crcValid || frame.errors.length > 0) {
+      score -= 10 + frame.errors.length
+    }
+  }
+  score -= outcome.errors.length * 5
+  return score
 }
 
 /**

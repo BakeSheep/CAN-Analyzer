@@ -37,11 +37,23 @@ export default function App() {
   const workerRef = useRef<Worker | null>(null)
   const requestIdRef = useRef(0)
   const lastFileRef = useRef<File | null>(null)
+  /** Mirrors `loading` for callbacks that must not capture stale state. */
+  const loadingRef = useRef<LoadingState | null>(null)
+  /** File name of the in-flight request, used when `complete` arrives. */
+  const pendingNameRef = useRef('')
 
   const [loading, setLoading] = useState<LoadingState | null>(null)
   const [analyzed, setAnalyzed] = useState<AnalyzedData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedFrame, setSelectedFrame] = useState<number | null>(null)
+
+  const updateLoading = useCallback(
+    (value: LoadingState | null) => {
+      loadingRef.current = value
+      setLoading(value)
+    },
+    [],
+  )
 
   const ensureWorker = useCallback((): Worker => {
     if (workerRef.current === null) {
@@ -66,23 +78,35 @@ export default function App() {
                 },
           )
         } else if (message.type === 'complete') {
-          setLoading((current) => {
-            setAnalyzed({
-              fileName: current?.fileName ?? '',
-              result: message.result,
-              overview: message.overview,
-            })
-            return null
+          setAnalyzed({
+            fileName: pendingNameRef.current,
+            result: message.result,
+            overview: message.overview,
           })
           setSelectedFrame(null)
+          updateLoading(null)
         } else {
-          setLoading(null)
+          updateLoading(null)
           if (!message.cancelled) setError(message.message)
         }
       }
     }
     return workerRef.current
-  }, [])
+  }, [updateLoading])
+
+  /**
+   * Hard-stop the in-flight analysis. The pipeline runs synchronously
+   * inside the worker, so `cancel` messages cannot interrupt it;
+   * terminating the worker is the only reliable way to free it.
+   */
+  const abortInFlight = useCallback(() => {
+    if (loadingRef.current !== null && workerRef.current !== null) {
+      workerRef.current.terminate()
+      workerRef.current = null
+    }
+    requestIdRef.current += 1
+    updateLoading(null)
+  }, [updateLoading])
 
   useEffect(() => {
     return () => {
@@ -93,34 +117,29 @@ export default function App() {
 
   const analyze = useCallback(
     (file: File, settings: AnalyzeSettings = {}) => {
-      const worker = ensureWorker()
-      // A new file/settings run supersedes (cancels) the previous request.
-      const previousId = requestIdRef.current
-      if (loading !== null) {
-        worker.postMessage({ type: 'cancel', requestId: previousId })
-      }
-      requestIdRef.current = previousId + 1
+      // A new file/settings run supersedes the previous request.
+      abortInFlight()
       lastFileRef.current = file
+      pendingNameRef.current = file.name
+      // Keep the empty/loading/analyzed/error states mutually exclusive:
+      // stale results must never sit next to a newer file's error.
       setError(null)
-      setLoading({ fileName: file.name, phase: 'reading', progress: 0 })
-      worker.postMessage({
+      setAnalyzed(null)
+      setSelectedFrame(null)
+      updateLoading({ fileName: file.name, phase: 'reading', progress: 0 })
+      ensureWorker().postMessage({
         type: 'analyze',
         requestId: requestIdRef.current,
         file,
         settings,
       })
     },
-    [ensureWorker, loading],
+    [abortInFlight, ensureWorker, updateLoading],
   )
 
   const cancel = useCallback(() => {
-    workerRef.current?.postMessage({
-      type: 'cancel',
-      requestId: requestIdRef.current,
-    })
-    requestIdRef.current += 1
-    setLoading(null)
-  }, [])
+    abortInFlight()
+  }, [abortInFlight])
 
   const reanalyze = useCallback(
     (overrides: AnalyzeSettings) => {
@@ -142,7 +161,9 @@ export default function App() {
       </header>
       <main className="app-main">
         <section aria-label="导入与状态" className="import-section">
-          <DropZone onFile={(file) => analyze(file)} disabled={loading !== null} />
+          {/* Import stays enabled during analysis: a new file supersedes
+              (terminates) the in-flight request. */}
+          <DropZone onFile={(file) => analyze(file)} disabled={false} />
           {loading !== null && (
             <div className="progress-panel" aria-live="polite">
               <p>

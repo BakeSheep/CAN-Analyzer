@@ -1,7 +1,10 @@
 import {
   AnalysisCancelledError,
   analyzeCaptureText,
+  decodeScore,
 } from '../../src/workers/analysisPipeline'
+import type { DecodeOutcome } from '../../src/core/canDecoder'
+import type { CanFrame } from '../../src/core/types'
 import { ScopeCsvParseError } from '../../src/core/csvParser'
 import type { AnalysisPhase } from '../../src/workers/protocol'
 import { encodeFrameBits } from '../fixtures/canFrames'
@@ -110,5 +113,59 @@ describe('analyzeCaptureText pipeline', () => {
     expect(() =>
       analyzeCaptureText(csv, { bitrateBps: 2_000_000 }),
     ).toThrowError(/样本/)
+  })
+})
+
+describe('decodeScore (polarity confirmation)', () => {
+  function fakeFrame(overrides: Partial<CanFrame>): CanFrame {
+    return {
+      index: 0,
+      startSample: 0,
+      endSample: 100,
+      format: 'standard',
+      id: 1,
+      idHex: '001',
+      rtr: false,
+      dlc: 0,
+      data: new Uint8Array(),
+      crc: 0,
+      crcValid: true,
+      acknowledged: true,
+      errors: [],
+      fields: [],
+      ...overrides,
+    }
+  }
+
+  it('scores junk frames below an empty outcome', () => {
+    const junk: DecodeOutcome = {
+      frames: [
+        fakeFrame({
+          crcValid: false,
+          errors: [
+            {
+              code: 'crc-mismatch',
+              message: 'x',
+              startSample: 0,
+              endSample: 1,
+            },
+          ],
+        }),
+      ],
+      errors: [],
+    }
+    const empty: DecodeOutcome = { frames: [], errors: [] }
+    expect(decodeScore(junk)).toBeLessThan(decodeScore(empty))
+  })
+
+  it('rewards only fully valid frames', () => {
+    const oneValid: DecodeOutcome = { frames: [fakeFrame({})], errors: [] }
+    const validPlusJunk: DecodeOutcome = {
+      frames: [fakeFrame({}), fakeFrame({ index: 1, crcValid: false })],
+      errors: [],
+    }
+    expect(decodeScore(oneValid)).toBeGreaterThan(0)
+    // Adding a junk frame must lower, not raise, the score.
+    expect(decodeScore(validPlusJunk)).toBeLessThan(decodeScore(oneValid))
   })
 })

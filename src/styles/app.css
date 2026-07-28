@@ -246,6 +246,16 @@ body {
   font: inherit;
 }
 
+.control-field input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.control-field-error {
+  margin: 0.15rem 0 0;
+  color: var(--color-danger);
+  font-size: 0.8rem;
+}
+
 .analyzer-controls button[type='submit'],
 .progress-panel button,
 .waveform-toolbar button {

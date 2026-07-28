@@ -169,6 +169,36 @@ describe('AnalyzerControls', () => {
       expect.objectContaining({ invertPolarity: true }),
     )
   })
+
+  it('blocks submit and shows an error for an empty custom bitrate', async () => {
+    const onApply = vi.fn()
+    render(
+      <AnalyzerControls settings={makeResult().settings} onApply={onApply} disabled={false} />,
+    )
+    await userEvent.selectOptions(screen.getByLabelText(/比特率/), 'custom')
+    await userEvent.click(screen.getByRole('button', { name: /重新分析/ }))
+    expect(onApply).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent(/大于 0/)
+  })
+
+  it('rejects a zero or negative custom bitrate', async () => {
+    const onApply = vi.fn()
+    render(
+      <AnalyzerControls settings={makeResult().settings} onApply={onApply} disabled={false} />,
+    )
+    await userEvent.selectOptions(screen.getByLabelText(/比特率/), 'custom')
+    await userEvent.type(screen.getByLabelText(/自定义比特率/), '0')
+    await userEvent.click(screen.getByRole('button', { name: /重新分析/ }))
+    expect(onApply).not.toHaveBeenCalled()
+
+    // A valid value clears the error and submits.
+    await userEvent.clear(screen.getByLabelText(/自定义比特率/))
+    await userEvent.type(screen.getByLabelText(/自定义比特率/), '640000')
+    await userEvent.click(screen.getByRole('button', { name: /重新分析/ }))
+    expect(onApply).toHaveBeenCalledWith(
+      expect.objectContaining({ bitrateBps: 640_000 }),
+    )
+  })
 })
 
 describe('FrameTable', () => {

@@ -17,6 +17,7 @@ export function AnalyzerControls({
 }: AnalyzerControlsProps) {
   const [bitrate, setBitrate] = useState<string>('auto')
   const [customBitrate, setCustomBitrate] = useState<string>('')
+  const [customError, setCustomError] = useState<string | null>(null)
   const [threshold, setThreshold] = useState<string>('')
   const [hysteresis, setHysteresis] = useState<string>('')
   const [polarity, setPolarity] = useState<string>('auto')
@@ -26,7 +27,14 @@ export function AnalyzerControls({
     const overrides: AnalyzeSettings = {}
     if (bitrate === 'custom') {
       const parsed = Number(customBitrate)
-      if (Number.isFinite(parsed) && parsed > 0) overrides.bitrateBps = parsed
+      if (customBitrate.trim() === '' || !Number.isFinite(parsed) || parsed <= 0) {
+        // Never silently fall back to auto detection: block the submit
+        // and surface a field-level error instead.
+        setCustomError('请输入大于 0 的自定义比特率（bit/s）。')
+        return
+      }
+      setCustomError(null)
+      overrides.bitrateBps = parsed
     } else if (bitrate !== 'auto') {
       overrides.bitrateBps = Number(bitrate)
     }
@@ -49,6 +57,7 @@ export function AnalyzerControls({
     <form
       className="analyzer-controls"
       aria-label="分析设置"
+      noValidate
       onSubmit={handleSubmit}
     >
       <div className="control-field">
@@ -77,10 +86,27 @@ export function AnalyzerControls({
             id="control-custom-bitrate"
             type="number"
             min={1}
+            required
+            aria-invalid={customError !== null}
+            aria-describedby={
+              customError !== null ? 'control-custom-bitrate-error' : undefined
+            }
             value={customBitrate}
-            onChange={(e) => setCustomBitrate(e.target.value)}
+            onChange={(e) => {
+              setCustomBitrate(e.target.value)
+              setCustomError(null)
+            }}
             disabled={disabled}
           />
+          {customError !== null && (
+            <p
+              id="control-custom-bitrate-error"
+              className="control-field-error"
+              role="alert"
+            >
+              {customError}
+            </p>
+          )}
         </div>
       )}
       <div className="control-field">
