@@ -16,6 +16,12 @@ const MIN_SAMPLES_PER_BIT = 4
 const MIN_EDGES = 8
 /** Candidates below this confidence force manual selection. */
 const CONFIDENCE_THRESHOLD = 0.5
+/**
+ * Runs at least this many bit periods long count as idle evidence: a valid
+ * stuffed CAN stream never holds a level longer than 5 bits between SOF and
+ * CRC, so ≥7 bits implies EOF/interframe idle, which must be recessive.
+ */
+const IDLE_RUN_BITS = 7
 
 export interface BitrateDetectorOptions {
   /** Extra user-provided rate evaluated alongside the common rates. */
@@ -29,13 +35,18 @@ export interface BitrateDetectorOptions {
  * the candidate bit period; normalized timing residuals, weak transition
  * counts, inconsistent edge phase, and missing single-bit intervals
  * (sub-harmonic candidates) are penalized.
+ *
+ * BOTH polarities are retained as separate ranked candidates. Idle-run
+ * evidence only weights the ranking; the decoder makes the final call via
+ * SOF/stuffing/CRC/EOF success, so a truncated or idle-poor capture cannot
+ * lock in a wrong polarity with high confidence.
  */
 export function detectBitrate(
   quantized: QuantizedSignal,
   sampleRateHz: number,
   options: BitrateDetectorOptions = {},
 ): BitrateDetection {
-  const { transitions, initialLevel } = quantized
+  const { transitions } = quantized
   const warnings: string[] = []
 
   // transitions[0] is the capture start, not a real edge.
@@ -44,10 +55,6 @@ export function detectBitrate(
   for (let i = 2; i < transitions.length; i += 1) {
     intervals.push(transitions[i] - transitions[i - 1])
   }
-
-  // The longest run should be recessive idle; if it is logic 0 the
-  // polarity mapping must be inverted before decoding.
-  const invertPolarity = longestRunLevel(quantized) === 0
 
   const rates = new Set<number>(COMMON_BITRATES)
   if (
@@ -86,9 +93,11 @@ export function detectBitrate(
     const phaseR = edgeCount > 0
       ? Math.hypot(sumCos, sumSin) / edgeCount
       : 0
-    let phaseOffsetSamples =
+    let bitBoundaryOffsetSamples =
       (Math.atan2(sumSin, sumCos) / (2 * Math.PI)) * samplesPerBit
-    if (phaseOffsetSamples < 0) phaseOffsetSamples += samplesPerBit
+    if (bitBoundaryOffsetSamples < 0) bitBoundaryOffsetSamples += samplesPerBit
+    const samplePointOffsetSamples =
+      (bitBoundaryOffsetSamples + 0.75 * samplesPerBit) % samplesPerBit
 
     // Sub-harmonic candidates (double/quadruple rate) fit every interval
     // but never see single-bit intervals, which stuffing guarantees.
@@ -96,21 +105,37 @@ export function detectBitrate(
     const singleBitFactor = 0.4 + 0.6 * Math.min(1, singleBitShare * 4)
     const edgeFactor = Math.min(1, edgeCount / 16)
     const phaseFactor = 0.5 + 0.5 * phaseR
-
-    const confidence =
+    const baseConfidence =
       timingScore * phaseFactor * edgeFactor * singleBitFactor
-    candidates.push({
-      bitrateBps,
-      samplesPerBit,
-      confidence,
-      invertPolarity,
-      phaseOffsetSamples,
-      diagnostics:
-        `spb=${samplesPerBit.toFixed(2)}, edges=${edgeCount}, ` +
-        `meanResidual=${(meanResidual * 100).toFixed(1)}%, ` +
-        `phaseR=${phaseR.toFixed(2)}, ` +
-        `singleBitShare=${(singleBitShare * 100).toFixed(0)}%`,
-    })
+
+    // Idle evidence for this rate: share of idle-length run time spent at
+    // logic 1 under the current (non-inverted) mapping. 0.5 = no evidence.
+    const recessiveIdleShare = idleRecessiveShare(
+      quantized,
+      samplesPerBit * IDLE_RUN_BITS,
+    )
+
+    for (const invertPolarity of [false, true] as const) {
+      const polarityEvidence = invertPolarity
+        ? 1 - recessiveIdleShare
+        : recessiveIdleShare
+      const confidence = baseConfidence * (0.5 + 0.5 * polarityEvidence)
+      candidates.push({
+        bitrateBps,
+        samplesPerBit,
+        confidence,
+        invertPolarity,
+        polarityEvidence,
+        bitBoundaryOffsetSamples,
+        samplePointOffsetSamples,
+        diagnostics:
+          `spb=${samplesPerBit.toFixed(2)}, edges=${edgeCount}, ` +
+          `meanResidual=${(meanResidual * 100).toFixed(1)}%, ` +
+          `phaseR=${phaseR.toFixed(2)}, ` +
+          `singleBitShare=${(singleBitShare * 100).toFixed(0)}%, ` +
+          `polarityEvidence=${(polarityEvidence * 100).toFixed(0)}%`,
+      })
+    }
   }
 
   candidates.sort((a, b) => b.confidence - a.confidence)
@@ -131,27 +156,38 @@ export function detectBitrate(
       '自动比特率检测置信度不足，结果仅供参考。请手动确认比特率与极性。',
     )
   }
-
-  // Keep `initialLevel` reserved for future diagnostics; polarity is judged
-  // from the longest run so a capture that starts mid-frame stays correct.
-  void initialLevel
+  if (best !== undefined && Math.abs(best.polarityEvidence - 0.5) < 0.1) {
+    warnings.push(
+      '极性证据不足（空闲段过短或被截断），已保留两种极性候选；' +
+        '最终以帧解码成功率（SOF/位填充/CRC/EOF）确认极性。',
+    )
+  }
 
   return { candidates, reliable, warnings }
 }
 
-/** Logic level of the longest run in the quantized signal. */
-function longestRunLevel(quantized: QuantizedSignal): 0 | 1 {
+/**
+ * Share of idle-length run time spent at logic 1 under the quantized
+ * mapping. Aggregates ALL runs at least `minRunSamples` long (including
+ * possibly truncated boundary runs) instead of trusting the single longest
+ * run. Returns 0.5 when no run qualifies (no evidence either way).
+ */
+function idleRecessiveShare(
+  quantized: QuantizedSignal,
+  minRunSamples: number,
+): number {
   const { transitions, initialLevel, sampleCount } = quantized
-  let bestLength = -1
-  let bestLevel: 0 | 1 = initialLevel
+  let recessiveTime = 0
+  let totalTime = 0
   for (let run = 0; run < transitions.length; run += 1) {
     const start = transitions[run]
-    const end = run + 1 < transitions.length ? transitions[run + 1] : sampleCount
+    const end =
+      run + 1 < transitions.length ? transitions[run + 1] : sampleCount
     const length = end - start
-    if (length > bestLength) {
-      bestLength = length
-      bestLevel = ((initialLevel ^ (run & 1)) & 1) as 0 | 1
-    }
+    if (length < minRunSamples) continue
+    totalTime += length
+    if (((initialLevel ^ (run & 1)) & 1) === 1) recessiveTime += length
   }
-  return bestLevel
+  if (totalTime === 0) return 0.5
+  return recessiveTime / totalTime
 }

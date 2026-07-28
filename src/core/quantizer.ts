@@ -26,6 +26,7 @@ export function quantize(
   capture: Capture,
   options: QuantizerOptions = {},
 ): QuantizedSignal {
+  validateOptions(options)
   const { samples } = capture
   const estimate = estimateLevels(samples)
   const warnings: string[] = []
@@ -75,6 +76,25 @@ export function quantize(
     levels,
     applied: { thresholdMv, hysteresisMv, dominantIsLow },
     warnings,
+  }
+}
+
+/** Reject manual overrides that would silently corrupt quantization. */
+function validateOptions(options: QuantizerOptions): void {
+  if (
+    options.thresholdMv !== undefined &&
+    !Number.isFinite(options.thresholdMv)
+  ) {
+    throw new RangeError(
+      `手动阈值无效（${options.thresholdMv}）：必须是有限数值（mV）。`,
+    )
+  }
+  if (options.hysteresisMv !== undefined) {
+    if (!Number.isFinite(options.hysteresisMv) || options.hysteresisMv < 0) {
+      throw new RangeError(
+        `手动滞回带无效（${options.hysteresisMv}）：必须是非负的有限数值（mV）。`,
+      )
+    }
   }
 }
 

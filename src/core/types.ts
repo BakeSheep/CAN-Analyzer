@@ -80,10 +80,24 @@ export interface BitrateCandidate {
   samplesPerBit: number
   /** 0..1 score; higher ranks first. */
   confidence: number
-  /** True when the signal must be inverted so idle is recessive (1). */
+  /**
+   * True when the signal must be inverted so idle is recessive (1).
+   * Both polarity variants are retained as separate candidates; the
+   * decoder confirms the winner via SOF/stuffing/CRC/EOF success.
+   */
   invertPolarity: boolean
-  /** Sampling phase offset in samples from a bit boundary. */
-  phaseOffsetSamples: number
+  /** 0..1 idle-level evidence supporting this polarity; 0.5 = ambiguous. */
+  polarityEvidence: number
+  /**
+   * Phase of the bit BOUNDARIES within the capture, in samples,
+   * modulo `samplesPerBit`. This is NOT a sampling point.
+   */
+  bitBoundaryOffsetSamples: number
+  /**
+   * Recommended decoder sampling position modulo `samplesPerBit`:
+   * the bit boundary phase plus 75% of a bit period.
+   */
+  samplePointOffsetSamples: number
   /** Human-readable scoring diagnostics. */
   diagnostics: string
 }

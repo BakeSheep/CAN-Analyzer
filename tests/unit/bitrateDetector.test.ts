@@ -87,6 +87,38 @@ describe('detectBitrate', () => {
     expect(ok.candidates[0]?.invertPolarity).toBe(false)
   })
 
+  it('retains both polarity variants as ranked candidates', () => {
+    const capture = makeSyntheticCapture({
+      bits,
+      bitrateBps: 500_000,
+      sampleRateHz: 50_000_000,
+    })
+    const result = detect(capture)
+    const variants = result.candidates.filter(
+      (c) => c.bitrateBps === 500_000,
+    )
+    expect(variants).toHaveLength(2)
+    expect(new Set(variants.map((c) => c.invertPolarity)).size).toBe(2)
+    // The disfavored polarity is retained but ranked strictly lower.
+    const [first, second] = variants
+    expect(first.confidence).toBeGreaterThan(second.confidence)
+  })
+
+  it('flags ambiguous polarity when idle runs are too short', () => {
+    // Only 3 idle bits at either end; content runs are all ≤5 bits, so no
+    // run reaches the 7-bit idle threshold → no polarity evidence.
+    const capture = makeSyntheticCapture({
+      bits,
+      bitrateBps: 500_000,
+      sampleRateHz: 50_000_000,
+      idleBitsBefore: 3,
+      idleBitsAfter: 3,
+    })
+    const result = detect(capture)
+    expect(result.candidates[0]?.polarityEvidence).toBeCloseTo(0.5, 5)
+    expect(result.warnings.join(' ')).toMatch(/极性/)
+  })
+
   it('refuses to claim success with insufficient transitions', () => {
     const capture = makeSyntheticCapture({
       bits: [0, 0, 0, 0, 0, 0],
@@ -123,7 +155,7 @@ describe('detectBitrate', () => {
     expect(result.reliable).toBe(true)
   })
 
-  it('estimates a usable sampling phase for clean captures', () => {
+  it('estimates bit-boundary phase and a 75% sampling point', () => {
     const capture = makeSyntheticCapture({
       bits,
       bitrateBps: 500_000,
@@ -131,9 +163,17 @@ describe('detectBitrate', () => {
     })
     const result = detect(capture)
     const best = result.candidates[0]
-    // Edges land on exact bit boundaries → phase offset near 0 (mod spb).
     const spb = best.samplesPerBit
-    const wrapped = Math.min(best.phaseOffsetSamples, spb - best.phaseOffsetSamples)
+    // Edges land on exact bit boundaries → boundary phase near 0 (mod spb).
+    const wrapped = Math.min(
+      best.bitBoundaryOffsetSamples,
+      spb - best.bitBoundaryOffsetSamples,
+    )
     expect(wrapped).toBeLessThan(spb * 0.1)
+    // The sampling point sits 75% of a bit period after the boundary.
+    const gap =
+      (best.samplePointOffsetSamples - best.bitBoundaryOffsetSamples + spb) %
+      spb
+    expect(gap).toBeCloseTo(0.75 * spb, 6)
   })
 })

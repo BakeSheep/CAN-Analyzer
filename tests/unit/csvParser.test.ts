@@ -71,6 +71,27 @@ describe('parseScopeCsv', () => {
     }
   })
 
+  it('rejects non-decimal formats accepted by Number(), e.g. 0x10', () => {
+    const header = 'CH(mV)  probe:X1,sampling rate : 50000000'
+    for (const bad of ['0x10', '0b101', '0o17', 'Infinity', '-Infinity', '1_000']) {
+      expect(() => parseScopeCsv(`${header}\n0\n${bad}\n`)).toThrowError(
+        ScopeCsvParseError,
+      )
+    }
+  })
+
+  it('rejects values that overflow Float32 such as 1e100', () => {
+    const header = 'CH(mV)  probe:X1,sampling rate : 50000000'
+    for (const bad of ['1e100', '-3.5e38']) {
+      expect(() => parseScopeCsv(`${header}\n0\n${bad}\n`)).toThrowError(
+        /Float32/,
+      )
+    }
+    // Boundary sanity: a large but representable value still parses.
+    const ok = parseScopeCsv(`${header}\n0\n3e38\n`)
+    expect(Number.isFinite(ok.samples[1])).toBe(true)
+  })
+
   it('rejects an empty capture with no samples', () => {
     expect(() =>
       parseScopeCsv('CH(mV)  probe:X1,sampling rate : 50000000\n\n'),

@@ -24,6 +24,9 @@ const HEADER_PATTERN =
 const PROBE_PATTERN = /probe\s*:\s*(?<probe>[^\s,]+)/i
 const RATE_PATTERN = /sampling\s*rate\s*:\s*(?<rate>[0-9][0-9.eE+-]*)/i
 
+/** Strict decimal/scientific notation; rejects hex, Infinity, NaN, etc. */
+const NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/
+
 /** Report progress at most every this many samples. */
 const PROGRESS_SAMPLE_INTERVAL = 50_000
 
@@ -98,12 +101,21 @@ export function parseScopeCsv(
   onProgress?.({ processed: offset, total })
 
   for (let entry = nextLine(); entry !== null; entry = nextLine()) {
-    const value = Number(entry.content)
-    if (!Number.isFinite(value)) {
+    if (!NUMBER_PATTERN.test(entry.content)) {
       throw new ScopeCsvParseError(
         entry.line,
         `样本值 “${truncate(entry.content)}” 不是有效数字。` +
           '每行应只包含一个十进制或科学计数法数值。',
+      )
+    }
+    const value = Number(entry.content)
+    // Values are stored as Float32; e.g. 1e100 is a finite Number but
+    // overflows to Infinity in a Float32Array and would poison quantization.
+    if (!Number.isFinite(value) || !Number.isFinite(Math.fround(value))) {
+      throw new ScopeCsvParseError(
+        entry.line,
+        `样本值 “${truncate(entry.content)}” 超出可处理的数值范围（Float32）。` +
+          '请检查导出数据的单位与量程。',
       )
     }
     if (count === samples.length) {

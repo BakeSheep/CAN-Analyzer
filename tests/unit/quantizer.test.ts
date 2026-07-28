@@ -142,4 +142,27 @@ describe('quantize', () => {
       dominantIsLow: false,
     })
   })
+
+  it('rejects non-finite manual thresholds', () => {
+    const capture = makeBimodalCapture()
+    expect(() => quantize(capture, { thresholdMv: Number.NaN })).toThrowError(
+      RangeError,
+    )
+    expect(() =>
+      quantize(capture, { thresholdMv: Number.POSITIVE_INFINITY }),
+    ).toThrowError(/阈值/)
+  })
+
+  it('rejects negative or non-finite manual hysteresis', () => {
+    const capture = makeBimodalCapture()
+    expect(() => quantize(capture, { hysteresisMv: -1 })).toThrowError(
+      /滞回/,
+    )
+    expect(() =>
+      quantize(capture, { hysteresisMv: Number.NaN }),
+    ).toThrowError(RangeError)
+    expect(() =>
+      quantize(capture, { hysteresisMv: Number.NEGATIVE_INFINITY }),
+    ).toThrowError(RangeError)
+  })
 })
