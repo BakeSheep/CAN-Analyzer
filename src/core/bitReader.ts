@@ -62,29 +62,19 @@ export class BitReader {
     return this.logicalCount
   }
 
+  /** True when five equal bits require one final complementary stuff bit. */
+  get needsStuffBit(): boolean {
+    return this.runLength === 5
+  }
+
   /**
    * Read the next logical bit, consuming an intervening stuff bit when the
    * previous five bits were equal. Throws `StuffBitError` when the sixth
    * equal bit appears instead of the expected opposite stuff bit.
    */
   nextStuffed(): BitSample | null {
-    if (this.runLength === 5) {
-      const stuff = this.bits[this.position]
-      if (stuff === undefined) return null
-      if (stuff.value === this.runLevel) {
-        throw new StuffBitError(stuff, this.position, this.logicalCount)
-      }
-      this.stuffBits.push({
-        value: stuff.value,
-        rawBitIndex: this.position,
-        startSample: stuff.startSample,
-        endSample: stuff.endSample,
-        isStuffBit: true,
-      })
-      this.position += 1
-      // The stuff bit itself starts a new run and may be stuffed again.
-      this.runLevel = stuff.value
-      this.runLength = 1
+    if (this.needsStuffBit && this.consumeRequiredStuffBit() === null) {
+      return null
     }
 
     const bit = this.bits[this.position]
@@ -105,6 +95,38 @@ export class BitReader {
       endSample: bit.endSample,
       isStuffBit: false,
     }
+  }
+
+  /**
+   * Finish the stuffed region before the fixed-form CRC delimiter.
+   * Returns the consumed trailing stuff bit, or null when none is due or
+   * the capture ends before a required bit. Callers can inspect
+   * needsStuffBit first to distinguish those two null cases.
+   */
+  finishStuffedRegion(): BitSample | null {
+    return this.needsStuffBit ? this.consumeRequiredStuffBit() : null
+  }
+
+  /** Consume and validate the complementary bit required after a five-bit run. */
+  private consumeRequiredStuffBit(): BitSample | null {
+    const stuff = this.bits[this.position]
+    if (stuff === undefined) return null
+    if (stuff.value === this.runLevel) {
+      throw new StuffBitError(stuff, this.position, this.logicalCount)
+    }
+    const consumed: BitSample = {
+      value: stuff.value,
+      rawBitIndex: this.position,
+      startSample: stuff.startSample,
+      endSample: stuff.endSample,
+      isStuffBit: true,
+    }
+    this.stuffBits.push(consumed)
+    this.position += 1
+    // The stuff bit itself starts a new run and may be stuffed again.
+    this.runLevel = stuff.value
+    this.runLength = 1
+    return consumed
   }
 
   /** Read the next bit without stuffing rules (CRC delimiter onward). */

@@ -60,18 +60,33 @@ describe('BitReader', () => {
     expect(reader.stuffBits.map((b) => b.rawBitIndex)).toEqual([5, 10])
   })
 
-  it('reads the CRC delimiter onward unstuffed', () => {
-    // Five 1s end the stuffed region; the following recessive CRC
-    // delimiter must NOT be treated as a stuff bit or an error.
-    const reader = new BitReader(rawBits([1, 1, 1, 1, 1, 1, 0]))
+  it('consumes a pending stuff bit before entering the raw trailer', () => {
+    // Five CRC-sequence 1s require a trailing stuff 0 before the recessive
+    // CRC delimiter. The delimiter itself and ACK slot are then unstuffed.
+    const reader = new BitReader(rawBits([1, 1, 1, 1, 1, 0, 1, 0]))
     for (let i = 0; i < 5; i += 1) reader.nextStuffed()
+    expect(reader.needsStuffBit).toBe(true)
+    expect(reader.finishStuffedRegion()).toMatchObject({
+      value: 0,
+      rawBitIndex: 5,
+      isStuffBit: true,
+    })
     const delimiter = reader.nextRaw()!
     expect(delimiter.value).toBe(1)
-    expect(delimiter.rawBitIndex).toBe(5)
+    expect(delimiter.rawBitIndex).toBe(6)
     expect(delimiter.isStuffBit).toBe(false)
-    expect(reader.stuffBits).toHaveLength(0)
+    expect(reader.stuffBits).toHaveLength(1)
     // Subsequent raw reads keep flowing without stuffing rules.
     expect(reader.nextRaw()?.value).toBe(0)
+  })
+
+  it('does not consume a raw trailer bit when no final stuff bit is due', () => {
+    const reader = new BitReader(rawBits([1, 0, 1]))
+    reader.nextStuffed()
+    reader.nextStuffed()
+    expect(reader.needsStuffBit).toBe(false)
+    expect(reader.finishStuffedRegion()).toBeNull()
+    expect(reader.nextRaw()?.value).toBe(1)
   })
 
   it('returns null at the end of the stream', () => {

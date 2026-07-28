@@ -50,8 +50,11 @@ export function applyStuffing(bits: ReadonlyArray<0 | 1>): Array<0 | 1> {
     }
     if (runLength === 5) continue
   }
-  // Handle a run completing on the final bit: CAN only stuffs when more
-  // stuffed bits follow, so no trailing stuff bit is appended here.
+  // CRC sequence is part of the stuffed region. If its final bit completes
+  // a five-bit run, the complementary bit is transmitted before delimiter.
+  if (runLength === 5) {
+    out.push(runLevel === 1 ? 0 : 1)
+  }
   return out
 }
 

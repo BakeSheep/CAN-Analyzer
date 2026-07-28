@@ -47,6 +47,11 @@ export function decodeCanFrames(
   options: DecodeOptions,
 ): DecodeOutcome {
   const { samplesPerBit } = options
+  if (!Number.isFinite(samplesPerBit) || samplesPerBit < 4) {
+    throw new RangeError(
+      `samplesPerBit 无效（${samplesPerBit}）：必须是至少为 4 的有限数值。`,
+    )
+  }
   const invert = options.invertPolarity ?? false
   const { transitions, initialLevel, sampleCount } = quantized
 
@@ -248,6 +253,11 @@ export function decodeCanFrames(
       })
     }
 
+    // The fifth identical bit may be the final CRC sequence bit. In that
+    // case a complementary stuff bit still appears before the delimiter.
+    if (reader.needsStuffBit && reader.finishStuffedRegion() === null) {
+      throw new TruncatedFrame(sampleCount)
+    }
     const crcDelimiter = readRaw()
     if (crcDelimiter.value !== 1) {
       frameErrors.push({

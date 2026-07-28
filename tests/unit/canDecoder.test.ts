@@ -109,6 +109,22 @@ describe('decodeCanFrames', () => {
     ).toBe(true)
   })
 
+  it('consumes a stuff bit inserted after the final CRC sequence bit', () => {
+    // For this zero-length frame, ID 0x009 produces a CRC sequence ending
+    // in five dominant bits, so the encoder inserts a complementary bit
+    // immediately before the fixed-form CRC delimiter.
+    const bits = encodeFrameBits({ id: 0x009, data: [] })
+    const { frames, errors } = decodeCanFrames(signalFromBits(bits), {
+      samplesPerBit: SPB,
+    })
+    expect(errors).toHaveLength(0)
+    expect(frames).toHaveLength(1)
+    expect(frames[0].id).toBe(0x009)
+    expect(frames[0].crcValid).toBe(true)
+    expect(frames[0].acknowledged).toBe(true)
+    expect(frames[0].errors).toHaveLength(0)
+  })
+
   it('flags a dominant bit inside EOF', () => {
     const { frames } = decodeSpec({
       id: 0x100,
@@ -227,4 +243,14 @@ describe('decodeCanFrames', () => {
     expect(frames[0].id).toBe(0x77)
     expect(frames[0].crcValid).toBe(true)
   })
+
+  it.each([0, -1, 3.99, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects invalid samplesPerBit=%s',
+    (samplesPerBit) => {
+      const signal = signalFromBits(encodeFrameBits({ id: 0x123, data: [] }))
+      expect(() => decodeCanFrames(signal, { samplesPerBit })).toThrowError(
+        RangeError,
+      )
+    },
+  )
 })
