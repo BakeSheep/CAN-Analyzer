@@ -199,6 +199,37 @@ describe('AnalyzerControls', () => {
       expect.objectContaining({ bitrateBps: 640_000 }),
     )
   })
+
+  it('blocks submit for a negative hysteresis instead of silently dropping it', async () => {
+    const onApply = vi.fn()
+    render(
+      <AnalyzerControls settings={makeResult().settings} onApply={onApply} disabled={false} />,
+    )
+    await userEvent.type(screen.getByLabelText(/滞回带/), '-1')
+    await userEvent.click(screen.getByRole('button', { name: /重新分析/ }))
+    expect(onApply).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent(/滞回带/)
+
+    // Correcting the value clears the error and submits the override.
+    await userEvent.clear(screen.getByLabelText(/滞回带/))
+    await userEvent.type(screen.getByLabelText(/滞回带/), '150')
+    await userEvent.click(screen.getByRole('button', { name: /重新分析/ }))
+    expect(onApply).toHaveBeenCalledWith(
+      expect.objectContaining({ hysteresisMv: 150 }),
+    )
+  })
+
+  it('accepts a negative threshold (valid for negative-voltage buses)', async () => {
+    const onApply = vi.fn()
+    render(
+      <AnalyzerControls settings={makeResult().settings} onApply={onApply} disabled={false} />,
+    )
+    await userEvent.type(screen.getByLabelText(/阈值/), '-1000')
+    await userEvent.click(screen.getByRole('button', { name: /重新分析/ }))
+    expect(onApply).toHaveBeenCalledWith(
+      expect.objectContaining({ thresholdMv: -1000 }),
+    )
+  })
 })
 
 describe('FrameTable', () => {

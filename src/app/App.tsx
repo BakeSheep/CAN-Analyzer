@@ -10,6 +10,7 @@ import type { AnalysisResult } from '../core/types'
 import type {
   AnalysisPhase,
   AnalyzeSettings,
+  DigitalSeries,
   OverviewSeries,
   WorkerResponse,
 } from '../workers/protocol'
@@ -25,6 +26,7 @@ interface AnalyzedData {
   fileName: string
   result: AnalysisResult
   overview: OverviewSeries
+  digital: DigitalSeries
 }
 
 interface LoadingState {
@@ -82,6 +84,7 @@ export default function App() {
             fileName: pendingNameRef.current,
             result: message.result,
             overview: message.overview,
+            digital: message.digital,
           })
           setSelectedFrame(null)
           updateLoading(null)
@@ -193,12 +196,14 @@ export default function App() {
             </div>
             <WaveformChart
               overview={analyzed.overview}
+              digital={analyzed.digital}
               frames={result.frames}
               selectedIndex={selectedFrame}
               onSelectFrame={setSelectedFrame}
               sampleRateHz={result.metadata.sampleRateHz}
               unit={result.metadata.unit}
               threshold={result.settings.thresholdMv}
+              levels={result.levels}
             />
             {result.errors.length > 0 && (
               <section aria-label="捕获级错误" className="capture-errors">

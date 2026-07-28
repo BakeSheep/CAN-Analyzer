@@ -84,6 +84,14 @@ function makeOverview() {
   }
 }
 
+function makeDigital() {
+  return {
+    transitions: new Int32Array([0]),
+    initialHigh: true,
+    sampleCount: 64_080,
+  }
+}
+
 function lastWorker(): FakeWorker {
   return FakeWorker.instances[FakeWorker.instances.length - 1]
 }
@@ -160,6 +168,7 @@ describe('App analysis workflow', () => {
         requestId: lastRequestId(worker),
         result: makeResult(),
         overview: makeOverview(),
+        digital: makeDigital(),
       })
     })
     expect(screen.getByText('good.csv')).toBeInTheDocument()
@@ -190,6 +199,7 @@ describe('App analysis workflow', () => {
         requestId: staleId,
         result: makeResult(),
         overview: makeOverview(),
+        digital: makeDigital(),
       })
     })
     // Still loading b.csv; the stale completion did not surface.

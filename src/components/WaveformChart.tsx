@@ -1,35 +1,43 @@
 import { useEffect, useMemo, useRef } from 'react'
 import uPlot from 'uplot'
-import type { CanFrame } from '../core/types'
-import type { OverviewSeries } from '../workers/protocol'
+import type { CanFrame, SignalLevels } from '../core/types'
+import type { DigitalSeries, OverviewSeries } from '../workers/protocol'
 
 interface WaveformChartProps {
   overview: OverviewSeries
+  digital: DigitalSeries
   frames: CanFrame[]
   selectedIndex: number | null
   onSelectFrame: (index: number) => void
   sampleRateHz: number
   unit: string
   threshold: number
+  levels: SignalLevels
 }
 
 const FRAME_OK_COLOR = 'rgba(11, 95, 165, 0.18)'
 const FRAME_ERROR_COLOR = 'rgba(179, 38, 30, 0.22)'
 const FRAME_SELECTED_COLOR = 'rgba(11, 95, 165, 0.38)'
+/** Skip the exact overlay when more runs than this are visible. */
+const MAX_VISIBLE_RUNS = 4000
 
 /**
  * uPlot waveform: decimated min/max envelope, threshold line, and
  * frame-colored overlays. Selecting a frame zooms to its span; clicking
- * inside an overlay selects the frame in the table.
+ * inside an overlay selects the frame in the table. At deep zoom the
+ * exact run-length digital signal is drawn on top, so bit-level detail
+ * stays visible even when one overview bucket outspans a whole frame.
  */
 export function WaveformChart({
   overview,
+  digital,
   frames,
   selectedIndex,
   onSelectFrame,
   sampleRateHz,
   unit,
   threshold,
+  levels,
 }: WaveformChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
@@ -55,6 +63,72 @@ export function WaveformChart({
   useEffect(() => {
     const container = containerRef.current
     if (container === null) return
+
+    const msPerSample = 1e3 / sampleRateHz
+
+    /** Exact square wave from the quantized transitions at deep zoom. */
+    const drawDigital = (u: uPlot) => {
+      const ctx = u.ctx
+      if (!ctx) return
+      const xMin = u.scales.x.min
+      const xMax = u.scales.x.max
+      if (xMin == null || xMax == null) return
+      const s0 = Math.max(0, Math.floor(xMin / msPerSample))
+      const s1 = Math.min(digital.sampleCount, Math.ceil(xMax / msPerSample))
+      if (s1 <= s0) return
+
+      const t = digital.transitions
+      // Binary search: last run starting at or before s0.
+      let lo = 0
+      let hi = t.length - 1
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1
+        if (t[mid] <= s0) lo = mid
+        else hi = mid - 1
+      }
+      // First run starting at or after s1 bounds the visible run count.
+      let lo2 = lo
+      let hi2 = t.length
+      while (lo2 < hi2) {
+        const mid = (lo2 + hi2) >> 1
+        if (t[mid] < s1) lo2 = mid + 1
+        else hi2 = mid
+      }
+      if (lo2 - lo > MAX_VISIBLE_RUNS) return // envelope is enough here
+
+      const yHigh = u.valToPos(levels.highLevel, 'y', true)
+      const yLow = u.valToPos(levels.lowLevel, 'y', true)
+      ctx.save()
+      ctx.strokeStyle = '#1a6b3c'
+      ctx.lineWidth = 1.5 * (window.devicePixelRatio || 1)
+      ctx.beginPath()
+      let high = lo % 2 === 0 ? digital.initialHigh : !digital.initialHigh
+      let started = false
+      for (let run = lo; run < Math.min(lo2 + 1, t.length); run += 1) {
+        const runStart = Math.max(t[run], s0)
+        const runEnd = Math.min(
+          run + 1 < t.length ? t[run + 1] : digital.sampleCount,
+          s1,
+        )
+        if (runEnd <= runStart) {
+          high = !high
+          continue
+        }
+        const x0 = u.valToPos(runStart * msPerSample, 'x', true)
+        const x1 = u.valToPos(runEnd * msPerSample, 'x', true)
+        const y = high ? yHigh : yLow
+        if (!started) {
+          ctx.moveTo(x0, y)
+          started = true
+        } else {
+          ctx.lineTo(x0, y) // vertical edge
+        }
+        ctx.lineTo(x1, y)
+        high = !high
+      }
+      ctx.stroke()
+      ctx.restore()
+    }
 
     const drawOverlays = (u: uPlot) => {
       const ctx = u.ctx
@@ -110,6 +184,7 @@ export function WaveformChart({
       ],
       hooks: {
         drawClear: [drawOverlays],
+        draw: [drawDigital],
         ready: [
           (u: uPlot) => {
             u.over?.addEventListener('click', (event: MouseEvent) => {
@@ -140,7 +215,7 @@ export function WaveformChart({
       plotRef.current = null
     }
     // Recreate the plot when the underlying capture changes.
-  }, [data, unit, threshold, toMs])
+  }, [data, unit, threshold, toMs, digital, levels, sampleRateHz])
 
   // Selecting a frame zooms the chart to its span (with margin).
   useEffect(() => {

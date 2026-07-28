@@ -19,35 +19,52 @@ export function AnalyzerControls({
   const [customBitrate, setCustomBitrate] = useState<string>('')
   const [customError, setCustomError] = useState<string | null>(null)
   const [threshold, setThreshold] = useState<string>('')
+  const [thresholdError, setThresholdError] = useState<string | null>(null)
   const [hysteresis, setHysteresis] = useState<string>('')
+  const [hysteresisError, setHysteresisError] = useState<string | null>(null)
   const [polarity, setPolarity] = useState<string>('auto')
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
     const overrides: AnalyzeSettings = {}
+    let invalid = false
     if (bitrate === 'custom') {
       const parsed = Number(customBitrate)
       if (customBitrate.trim() === '' || !Number.isFinite(parsed) || parsed <= 0) {
         // Never silently fall back to auto detection: block the submit
         // and surface a field-level error instead.
         setCustomError('请输入大于 0 的自定义比特率（bit/s）。')
-        return
+        invalid = true
+      } else {
+        setCustomError(null)
+        overrides.bitrateBps = parsed
       }
-      setCustomError(null)
-      overrides.bitrateBps = parsed
     } else if (bitrate !== 'auto') {
       overrides.bitrateBps = Number(bitrate)
     }
     if (threshold.trim() !== '') {
       const parsed = Number(threshold)
-      if (Number.isFinite(parsed)) overrides.thresholdMv = parsed
+      if (!Number.isFinite(parsed)) {
+        setThresholdError('阈值必须是有限数值（mV，可为负）。')
+        invalid = true
+      } else {
+        setThresholdError(null)
+        overrides.thresholdMv = parsed
+      }
     }
     if (hysteresis.trim() !== '') {
       const parsed = Number(hysteresis)
-      if (Number.isFinite(parsed) && parsed >= 0) {
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        // A negative or non-finite band must block the submit, not be
+        // silently dropped while the analysis still runs.
+        setHysteresisError('滞回带必须是不小于 0 的数值（mV）。')
+        invalid = true
+      } else {
+        setHysteresisError(null)
         overrides.hysteresisMv = parsed
       }
     }
+    if (invalid) return
     if (polarity === 'invert') overrides.invertPolarity = true
     else if (polarity === 'normal') overrides.invertPolarity = false
     onApply(overrides)
@@ -115,10 +132,26 @@ export function AnalyzerControls({
           id="control-threshold"
           type="number"
           placeholder={settings.thresholdMv.toFixed(0)}
+          aria-invalid={thresholdError !== null}
+          aria-describedby={
+            thresholdError !== null ? 'control-threshold-error' : undefined
+          }
           value={threshold}
-          onChange={(e) => setThreshold(e.target.value)}
+          onChange={(e) => {
+            setThreshold(e.target.value)
+            setThresholdError(null)
+          }}
           disabled={disabled}
         />
+        {thresholdError !== null && (
+          <p
+            id="control-threshold-error"
+            className="control-field-error"
+            role="alert"
+          >
+            {thresholdError}
+          </p>
+        )}
       </div>
       <div className="control-field">
         <label htmlFor="control-hysteresis">滞回带 (mV)</label>
@@ -127,10 +160,26 @@ export function AnalyzerControls({
           type="number"
           min={0}
           placeholder={settings.hysteresisMv.toFixed(0)}
+          aria-invalid={hysteresisError !== null}
+          aria-describedby={
+            hysteresisError !== null ? 'control-hysteresis-error' : undefined
+          }
           value={hysteresis}
-          onChange={(e) => setHysteresis(e.target.value)}
+          onChange={(e) => {
+            setHysteresis(e.target.value)
+            setHysteresisError(null)
+          }}
           disabled={disabled}
         />
+        {hysteresisError !== null && (
+          <p
+            id="control-hysteresis-error"
+            className="control-field-error"
+            role="alert"
+          >
+            {hysteresisError}
+          </p>
+        )}
       </div>
       <div className="control-field">
         <label htmlFor="control-polarity">极性</label>

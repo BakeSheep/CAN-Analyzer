@@ -6,6 +6,7 @@ import type { AnalysisResult, Capture, QuantizedSignal } from '../core/types'
 import type {
   AnalysisPhase,
   AnalyzeSettings,
+  DigitalSeries,
   OverviewSeries,
 } from './protocol'
 
@@ -33,6 +34,8 @@ export interface PipelineHooks {
 export interface AnalysisOutput {
   result: AnalysisResult
   overview: OverviewSeries
+  /** Exact transitions so the chart can render bit-level detail. */
+  digital: DigitalSeries
 }
 
 /** Maximum number of decimated overview buckets sent to the UI. */
@@ -173,7 +176,22 @@ export function analyzeCaptureText(
     errors: outcome.errors,
     warnings,
   }
-  return { result, overview: buildOverview(capture, OVERVIEW_BUCKETS) }
+  // Exact run-length signal for deep-zoom rendering. `initialLevel` is a
+  // LOGIC level; map it back to the voltage domain via the polarity that
+  // the quantizer applied.
+  const digital: DigitalSeries = {
+    transitions: quantized.transitions,
+    initialHigh: quantized.applied.dominantIsLow
+      ? quantized.initialLevel === 1
+      : quantized.initialLevel === 0,
+    sampleCount: quantized.sampleCount,
+  }
+
+  return {
+    result,
+    overview: buildOverview(capture, OVERVIEW_BUCKETS),
+    digital,
+  }
 }
 
 /** Count frames with a valid CRC and no frame-level errors. */

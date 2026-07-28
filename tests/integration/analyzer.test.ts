@@ -65,6 +65,15 @@ describe('analyzeCaptureText pipeline', () => {
     expect(overview.bucketStart.length).toBe(overview.min.length)
     expect(overview.sampleCount).toBe(result.metadata.sampleCount)
     expect(overview.bucketSize).toBeGreaterThanOrEqual(1)
+
+    // Exact run-length signal for deep-zoom rendering must be returned.
+    const { digital } = output
+    expect(digital.transitions).toBeInstanceOf(Int32Array)
+    expect(digital.transitions[0]).toBe(0)
+    expect(digital.transitions.length).toBeGreaterThan(2)
+    expect(digital.sampleCount).toBe(result.metadata.sampleCount)
+    // Idle before the SOF sits at the recessive (high-voltage) level.
+    expect(digital.initialHigh).toBe(true)
   })
 
   it('confirms polarity by decode success when idle evidence is absent', () => {

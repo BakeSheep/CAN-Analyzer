@@ -23,6 +23,18 @@ export interface OverviewSeries {
   sampleCount: number
 }
 
+/**
+ * Exact run-length digital signal for bit-level rendering at deep zoom,
+ * where one overview bucket can be longer than a whole frame.
+ */
+export interface DigitalSeries {
+  /** Sample index where each run starts; `transitions[0]` is 0. */
+  transitions: Int32Array
+  /** True when the first run sits at the HIGH voltage cluster. */
+  initialHigh: boolean
+  sampleCount: number
+}
+
 export type AnalysisPhase =
   | 'reading'
   | 'quantizing'
@@ -57,6 +69,7 @@ export interface CompleteMessage {
   requestId: number
   result: AnalysisResult
   overview: OverviewSeries
+  digital: DigitalSeries
 }
 
 export interface FailedMessage {

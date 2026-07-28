@@ -51,19 +51,20 @@ async function handleAnalyze(
     const text = await file.text()
     if (cancelledIds.has(requestId)) throw new AnalysisCancelledError()
 
-    const { result, overview } = analyzeCaptureText(text, settings, {
+    const { result, overview, digital } = analyzeCaptureText(text, settings, {
       onPhase: reportProgress,
       shouldCancel: () => cancelledIds.has(requestId),
     })
     if (cancelledIds.has(requestId)) throw new AnalysisCancelledError()
 
-    // Transfer the overview buffers instead of copying them.
+    // Transfer the overview/digital buffers instead of copying them.
     post(
-      { type: 'complete', requestId, result, overview },
+      { type: 'complete', requestId, result, overview, digital },
       [
         overview.bucketStart.buffer,
         overview.min.buffer,
         overview.max.buffer,
+        digital.transitions.buffer,
       ],
     )
   } catch (error) {
