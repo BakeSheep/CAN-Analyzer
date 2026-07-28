@@ -6,6 +6,7 @@ import { FileSummary } from '../components/FileSummary'
 import { FrameDetails } from '../components/FrameDetails'
 import { FrameTable } from '../components/FrameTable'
 import { WaveformChart } from '../components/WaveformChart'
+import { framesToCsv, framesToJson } from '../core/exporters'
 import type { AnalysisResult } from '../core/types'
 import type {
   AnalysisPhase,
@@ -152,6 +153,40 @@ export default function App() {
     [analyze],
   )
 
+  const downloadText = useCallback(
+    (content: string, mimeType: string, extension: string) => {
+      if (analyzed === null) return
+      const blob = new Blob([content], { type: mimeType })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${analyzed.fileName.replace(/\.[^.]+$/, '')}-frames.${extension}`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+    },
+    [analyzed],
+  )
+
+  const exportJson = useCallback(() => {
+    if (analyzed === null) return
+    downloadText(
+      framesToJson(analyzed.result, analyzed.result.frames),
+      'application/json',
+      'json',
+    )
+  }, [analyzed, downloadText])
+
+  const exportCsv = useCallback(() => {
+    if (analyzed === null) return
+    downloadText(
+      framesToCsv(analyzed.result.frames, analyzed.result.metadata.sampleRateHz),
+      'text/csv',
+      'csv',
+    )
+  }, [analyzed, downloadText])
+
   const result = analyzed?.result ?? null
 
   return (
@@ -219,6 +254,16 @@ export default function App() {
                 </ul>
               </section>
             )}
+            <section aria-label="导出" className="export-toolbar">
+              {/* Export is only rendered after a successful analysis; the
+                  labels state explicitly that ALL frames are exported. */}
+              <button type="button" onClick={exportJson} disabled={loading !== null}>
+                导出全部帧 JSON
+              </button>
+              <button type="button" onClick={exportCsv} disabled={loading !== null}>
+                导出全部帧 CSV
+              </button>
+            </section>
             <div className="inspect-split">
               <FrameTable
                 frames={result.frames}
