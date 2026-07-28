@@ -2,11 +2,9 @@
 
 > 浏览器端 CAN 波形分析器：导入示波器 CSV，自动检测比特率并解码 Classic CAN 2.0A/2.0B 帧。
 
-![screenshot placeholder](docs/screenshot.png)
-<!-- TODO: 截图占位。发布前替换为实际界面截图。 -->
+![CAN Waveform Analyzer 分析 000.CSV 的界面](docs/screenshot.png)
 
-**在线体验**：`https://<owner>.github.io/<repo>/`
-<!-- TODO: 仓库发布到 GitHub Pages 后替换为真实 URL。 -->
+**在线体验**：[https://bakesheep.github.io/CAN-Analyzer/](https://bakesheep.github.io/CAN-Analyzer/)
 
 ## 隐私声明
 
@@ -95,7 +93,7 @@ flowchart LR
 
 ## GitHub Pages 部署
 
-仓库使用 `.github/workflows/deploy-pages.yml` 自动部署：推送到 `main` 后运行测试、类型检查与构建，并将 `dist/` 发布到 Pages。首次启用需在仓库 **Settings → Pages** 中将 Source 设为 **GitHub Actions**。
+仓库使用 `.github/workflows/deploy-pages.yml` 自动部署：推送到默认分支 `master` 后运行测试、类型检查与构建，并将 `dist/` 发布到 Pages。首次启用需在仓库 **Settings → Pages** 中将 Source 设为 **GitHub Actions**。
 
 ## 许可证
 
