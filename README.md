@@ -1,38 +1,68 @@
 # CAN Waveform Analyzer
 
-一个运行在浏览器中的 CAN 示波器波形分析工具。
+> 浏览器端 CAN 波形分析器：导入示波器 CSV，自动检测比特率并解码 Classic CAN 2.0A/2.0B 帧。
 
-导入示波器导出的 CSV 采样数据后，工具将自动识别模拟信号电平、CAN 波特率与极性，并解析 Classic CAN 2.0A/2.0B 帧。所有分析均在本地浏览器中完成，原始数据不会上传到服务器。
+![screenshot placeholder](docs/screenshot.png)
+<!-- TODO: 截图占位。发布前替换为实际界面截图。 -->
 
-> 当前状态：核心解析引擎已经完成；文件导入界面、波形图、Web Worker、结果导出和 GitHub Pages 部署仍在开发中。
+**在线体验**：`https://<owner>.github.io/<repo>/`
+<!-- TODO: 仓库发布到 GitHub Pages 后替换为真实 URL。 -->
 
-## 已实现功能
+## 隐私声明
 
-- 解析示波器单通道 CSV 波形。
-- 识别采样率、探头倍率、电压单位和样本数量。
-- 使用双电平聚类和滞回判决将模拟波形转换为数字信号。
-- 自动检测常见 CAN 波特率：
-  - 10 / 20 / 33.333 / 50 / 83.333 kbit/s
-  - 100 / 125 / 250 / 500 / 800 kbit/s
-  - 1 Mbit/s
-- 保留两种信号极性候选，并根据空闲电平证据排序。
-- 解析 Classic CAN 标准帧和扩展帧：
-  - 11 位与 29 位标识符
-  - 数据帧与远程帧
-  - DLC 与 0–8 字节数据
-  - CRC-15/CAN
-  - ACK
-  - 位填充
-  - CRC delimiter、ACK delimiter 和 EOF
-- 定位 CRC、位填充、帧格式和截断错误。
-- 在损坏帧之后继续搜索下一个有效帧。
-- 使用确定性的合成波形测试不同电平、噪声、抖动、极性和波特率。
+**捕获数据永远不会离开你的浏览器。** 文件解析、量化、比特率检测和 CAN 解码全部在本地 Web Worker 中完成；本项目没有任何后端、上传、账号或云存储。
 
-## 工作流程
+## 支持的 CSV 输入格式
+
+第一行为元数据头，之后每行一个电压样本：
+
+```text
+CH(mV)  probe:X1,sampling rate : 50000000
+6
+-2
+-2220
+...
+```
+
+具体文法：
+
+- 头部：`<通道>(<单位>)`，可选 `probe:<衰减>`，必需 `sampling rate : <正数>`（大小写不敏感、容忍空格差异）。
+- 样本：每行一个十进制或科学计数法数值（如 `-2222.75`、`1e-3`）。拒绝十六进制（`0x10`）、`Infinity`、下划线分隔等非严格格式。
+- 容忍 UTF-8 BOM、CRLF/LF 混合换行和空行。
+- 超出 Float32 表示范围的值（如 `1e100`）会报错并给出行号。
+
+## 功能
+
+- 波形总览（降采样 min/max 包络）+ 深度缩放时的**位级精确方波**重建。
+- 自动两电平聚类阈值/滞回估计，支持手动覆盖（阈值、滞回带、极性）。
+- 自动比特率检测（10 kbit/s – 1 Mbit/s 常用速率 + 自定义速率），双极性候选按空闲证据与解码成功率共同确认。
+- Classic CAN 2.0A/2.0B 数据帧/远程帧解码：ID、IDE、RTR、DLC、载荷、CRC-15 校验、ACK、时间戳、字段区间。
+- 位填充校验、CRC 校验、界定符/EOF 校验；坏帧局部化并从下一个空闲边界恢复。
+- 帧过滤（ID/状态）、表格 ↔ 波形联动导航、JSON/CSV 导出（RFC 4180，防公式注入）。
+- 大文件分析在 Web Worker 中执行，可取消（terminate 语义，真正中断计算）。
+
+## 限制（v1）
+
+- 仅支持 Classic CAN，**不支持** CAN FD、CAN XL、DBC 导入、USB/串口实时采集。
+- 噪声大、空闲段过短或采样率过低（每位 < 4 个样本）的捕获可能需要手动指定比特率/极性/阈值。
+- 无法保证解码没有可观测“空闲→SOF”边沿的捕获。
+
+## 本地开发
+
+```powershell
+npm ci          # 安装依赖
+npm run dev     # 开发服务器
+npm test -- --run   # 运行全部测试
+npm run typecheck   # TypeScript 检查
+npm run build   # 生产构建（输出 dist/）
+npm run preview # 预览生产构建
+```
+
+## 架构
 
 ```mermaid
 flowchart LR
-    A["示波器 CSV"] --> B["解析元数据与采样点"]
+    A["示波器 CSV"] --> B["解析元数据与采样值"]
     B --> C["模拟电平聚类"]
     C --> D["数字化与跳变提取"]
     D --> E["波特率、相位与极性检测"]
@@ -40,173 +70,28 @@ flowchart LR
     F --> G["CAN 帧与错误结果"]
 ```
 
-采样点索引是内部的标准时间坐标，显示时间通过以下公式计算：
+采样点索引是内部唯一时间坐标，显示时间按 `timeSeconds = sampleIndex / sampleRateHz` 换算。
 
-```text
-timeSeconds = sampleIndex / sampleRateHz
-```
+- `src/core/`：框架无关的确定性 TypeScript 模块（解析、量化、检测、CRC、去位填充、解码、导出），全部有单元测试。
+- `src/workers/`：分析管线（`analysisPipeline.ts`）与 Worker 消息编排（`analyzer.worker.ts`），主线程只接收降采样概览、精确变化点和解码结果。
+- `src/components/` + `src/app/App.tsx`：React UI，empty → loading → analyzed | error 四态互斥。
 
-## 支持的 CSV 格式
+## 使用示例（000.CSV）
 
-当前解析器支持以下示波器导出格式：
+以 50 MHz 采样、约 64,080 个样本的 `000.CSV` 为例（该文件不随仓库分发）：
 
-```csv
-CH(mV)  probe:X1,sampling rate : 50000000
-4
-4
--1
--2218
--2223
-8
-13
-```
+1. 打开应用，将 `000.CSV` 拖入导入区。
+2. 应用解析出 50 MHz 采样率、约 1.2816 ms 时长，自动聚类出约 0 mV 与约 -2.22 V 两个电平。
+3. 自动比特率检测应将 **500 kbit/s** 排为第一。
+4. 波形叠加帧覆盖色块；点击表格行可缩放到对应帧，深度缩放可见每个位。
+5. 通过“导出全部帧 JSON/CSV”保存解码结果。
 
-格式要求：
+若自动检测置信度不足（短捕获/强噪声），按界面提示手动确认比特率与极性。
 
-- 第一行包含通道单位和 `sampling rate`。
-- `probe` 字段可选。
-- 第一行之后每行包含一个采样值。
-- 支持正负数、小数和科学计数法。
-- 支持 UTF-8 BOM、LF、CRLF 和空行。
-- 不接受十六进制、`NaN`、`Infinity` 或超出 Float32 范围的数值。
+## GitHub Pages 部署
 
-解析失败时会返回具体行号和可读的错误说明。
+仓库使用 `.github/workflows/deploy-pages.yml` 自动部署：推送到 `main` 后运行测试、类型检查与构建，并将 `dist/` 发布到 Pages。首次启用需在仓库 **Settings → Pages** 中将 Source 设为 **GitHub Actions**。
 
-## 快速开始
+## 许可证
 
-### 环境要求
-
-- Node.js `^20.19.0` 或 `>=22.12.0`
-- npm
-
-### 安装依赖
-
-```bash
-npm install
-```
-
-### 启动开发服务器
-
-```bash
-npm run dev
-```
-
-Vite 会输出本地访问地址。当前页面仅包含应用外壳，完整的文件导入和分析界面仍在开发中。
-
-### 运行测试
-
-```bash
-npm test -- --run
-```
-
-监听模式：
-
-```bash
-npm run test:watch
-```
-
-### 类型检查
-
-```bash
-npm run typecheck
-```
-
-### 构建生产版本
-
-```bash
-npm run build
-```
-
-构建结果位于 `dist/`。
-
-本地预览生产构建：
-
-```bash
-npm run preview
-```
-
-## 样例验证
-
-开发阶段使用了一份实际示波器文件进行回归验证，该文件不包含在仓库中：
-
-| 项目 | 结果 |
-| --- | ---: |
-| 采样率 | 50 MHz |
-| 采样点 | 64,080 |
-| 时长 | 约 1.2816 ms |
-| 电压范围 | -2323 至 108 mV |
-| 自动识别波特率 | 500 kbit/s |
-| 有效帧 | 5 个 CRC 正确的扩展帧 |
-| 帧内容 | ID `0x100`，Data `1F 6B` |
-
-这份文件仅用于本地验收，不会提交到仓库或上传到网络。
-
-## 项目结构
-
-```text
-src/
-├── app/                    React 应用外壳
-├── core/
-│   ├── csvParser.ts        示波器 CSV 解析
-│   ├── quantizer.ts        模拟电平聚类与数字化
-│   ├── bitrateDetector.ts  波特率、相位和极性检测
-│   ├── bitReader.ts        CAN 位填充读取
-│   ├── canCrc.ts           CRC-15/CAN
-│   ├── canDecoder.ts       Classic CAN 帧解析
-│   └── types.ts            公共领域类型
-├── styles/
-└── main.tsx
-
-tests/
-├── fixtures/               确定性合成波形与 CAN 帧
-└── unit/                   单元和协议回归测试
-```
-
-## 技术栈
-
-- React
-- TypeScript
-- Vite
-- Vitest
-- Testing Library
-- uPlot
-
-核心解析模块不依赖 React，可以独立测试，并将在后续阶段放入 Web Worker 中运行。
-
-## 当前限制
-
-- 仅支持 Classic CAN 2.0A/2.0B。
-- 暂不支持 CAN FD、CAN XL 或 DBC 文件。
-- 暂不支持实时 CAN 硬件、串口或 USB 采集。
-- 暂不支持多通道差分波形组合。
-- 自动检测需要足够的跳变和可识别的空闲区间。
-- 每位少于 4 个采样点时不会执行 CAN 帧解码。
-- 噪声过大、捕获过短或帧首尾被截断时，可能需要手动设置阈值、极性或波特率。
-
-## 开发路线
-
-- [x] CSV 解析
-- [x] 模拟波形数字化
-- [x] 波特率、采样相位和极性检测
-- [x] CRC-15/CAN 与位填充
-- [x] Classic CAN 2.0A/2.0B 帧解析
-- [ ] Web Worker 分析流水线
-- [ ] CSV 拖放与分析控制界面
-- [ ] 可缩放波形图和帧字段覆盖层
-- [ ] 帧列表、筛选和详情面板
-- [ ] JSON/CSV 结果导出
-- [ ] GitHub Actions 与 GitHub Pages
-- [ ] DBC 与 CAN FD（后续版本）
-
-详细实施计划见 [`docs/plans/2026-07-27-can-waveform-analyzer.md`](docs/plans/2026-07-27-can-waveform-analyzer.md)。
-
-## 隐私
-
-- 文件内容只在本地浏览器中读取和分析。
-- 项目不需要后端服务器。
-- 项目不包含遥测、账户或云端存储。
-- GitHub Pages 仅用于托管静态应用文件。
-
-## License
-
-项目计划以 [MIT License](https://opensource.org/license/mit) 发布。正式发布前，需要在仓库根目录添加 `LICENSE` 文件，并填写正确的版权所有者名称。
+[MIT](LICENSE)。版权所有者见 LICENSE 文件。
