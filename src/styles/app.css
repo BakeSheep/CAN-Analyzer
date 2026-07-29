@@ -87,6 +87,12 @@ body {
   clip-path: polygon(0 100%, 25% 100%, 25% 0, 75% 0, 75% 100%, 100% 100%);
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .github-link {
   display: inline-flex;
   align-items: center;
@@ -100,6 +106,23 @@ body {
 }
 
 .github-link:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* EN/中 language toggle, styled to match the GitHub pill. */
+.lang-toggle {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.lang-toggle:hover {
   border-color: var(--color-accent);
   color: var(--color-accent);
 }
@@ -331,8 +354,9 @@ button:disabled {
 .waveform-toolbar {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.5rem 1rem;
   margin-bottom: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .waveform-hint {
@@ -344,6 +368,15 @@ button:disabled {
 .waveform-container {
   width: 100%;
   min-height: 320px;
+}
+
+/* Empty-state chart area before a CSV is imported. */
+.waveform-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: 1.5rem;
 }
 
 /* Frame status legend (frame strip is drawn on the chart canvas). */
@@ -385,6 +418,7 @@ button:disabled {
   margin-left: auto;
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .frame-table-actions button {
@@ -403,6 +437,16 @@ button:disabled {
   grid-template-columns: 3fr 2fr;
   gap: 1rem;
   align-items: start;
+}
+
+/* Grid/flex children may not shrink below content width by default;
+   allow them to, so wide tables scroll instead of overflowing the page. */
+.inspect-split > * {
+  min-width: 0;
+}
+
+.frame-details {
+  overflow-x: auto;
 }
 
 .frame-table-filters {
@@ -505,14 +549,39 @@ button:disabled {
   .inspect-split {
     display: flex;
     flex-direction: column;
+    /* Column + wrap makes Chrome over-size the container and stretch
+       the cards; start-alignment would shrink cards to content width. */
+    flex-wrap: nowrap;
+    align-items: stretch;
   }
 
+  /* In a column, the row flex-basis values would become heights and
+     stretch the cards with empty space; size every card by content. */
   .import-card,
+  .top-row .file-summary,
   .top-row .analyzer-controls {
     flex: 1 1 auto;
   }
 
   .app-main {
     padding: 0.75rem;
+  }
+
+  .frame-table-scroll {
+    max-height: 320px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-header {
+    padding: 0.6rem 0.75rem;
+  }
+
+  .app-header h1 {
+    font-size: 1.05rem;
+  }
+
+  .frame-table-actions {
+    margin-left: 0;
   }
 }

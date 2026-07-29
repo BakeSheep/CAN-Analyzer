@@ -1,4 +1,5 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
+import { useI18n } from '../app/i18n'
 
 interface DropZoneProps {
   onFile: (file: File) => void
@@ -7,6 +8,7 @@ interface DropZoneProps {
 
 /** Local-file import area: click, keyboard, or drag & drop. */
 export function DropZone({ onFile, disabled }: DropZoneProps) {
+  const { t } = useI18n()
   const [dragActive, setDragActive] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -36,11 +38,9 @@ export function DropZone({ onFile, disabled }: DropZoneProps) {
       onDragLeave={() => setDragActive(false)}
       onDrop={handleDrop}
     >
-      <p className="drop-zone-hint">
-        将示波器导出的 CSV 文件拖放到此处，或
-      </p>
+      <p className="drop-zone-hint">{t('drop.hint')}</p>
       <label className="file-label">
-        导入 CSV 文件
+        {t('drop.button')}
         <input
           ref={inputRef}
           type="file"

@@ -190,7 +190,8 @@ describe('App analysis workflow', () => {
     })
     expect(screen.getByRole('alert')).toHaveTextContent('第 1 行')
     expect(screen.queryByText('good.csv')).not.toBeInTheDocument()
-    expect(screen.queryByText(/文件摘要|采样率/)).not.toBeInTheDocument()
+    // Cards stay visible in placeholder mode, but stale values must be gone.
+    expect(screen.queryByText(/50\s*MHz/)).not.toBeInTheDocument()
   })
 
   it('ignores late messages from superseded requests', async () => {

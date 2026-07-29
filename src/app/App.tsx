@@ -15,12 +15,13 @@ import type {
   OverviewSeries,
   WorkerResponse,
 } from '../workers/protocol'
+import { I18nProvider, useI18n, type MessageKey } from './i18n'
 
-const PHASE_LABELS: Record<AnalysisPhase, string> = {
-  reading: '读取文件',
-  quantizing: '量化波形',
-  'detecting-bitrate': '检测比特率',
-  decoding: '解码 CAN 帧',
+const PHASE_KEYS: Record<AnalysisPhase, MessageKey> = {
+  reading: 'phase.reading',
+  quantizing: 'phase.quantizing',
+  'detecting-bitrate': 'phase.detecting-bitrate',
+  decoding: 'phase.decoding',
 }
 
 interface AnalyzedData {
@@ -37,6 +38,15 @@ interface LoadingState {
 }
 
 export default function App() {
+  return (
+    <I18nProvider>
+      <AppContent />
+    </I18nProvider>
+  )
+}
+
+function AppContent() {
+  const { t, toggleLang } = useI18n()
   const workerRef = useRef<Worker | null>(null)
   const requestIdRef = useRef(0)
   const lastFileRef = useRef<File | null>(null)
@@ -188,44 +198,58 @@ export default function App() {
   }, [analyzed, downloadText])
 
   const result = analyzed?.result ?? null
+  const hasData = analyzed !== null && result !== null
 
   return (
     <>
       <header className="app-header">
         <h1>CAN Waveform Analyzer</h1>
-        <a
-          className="github-link"
-          href="https://github.com/bakesheep/CAN-Analyzer"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 16 16"
-            width="16"
-            height="16"
-            fill="currentColor"
+        <div className="header-actions">
+          <a
+            className="github-link"
+            href="https://github.com/bakesheep/CAN-Analyzer"
+            target="_blank"
+            rel="noopener noreferrer"
           >
-            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
-          </svg>
-          GitHub
-        </a>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 16 16"
+              width="16"
+              height="16"
+              fill="currentColor"
+            >
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+            </svg>
+            GitHub
+          </a>
+          <button
+            type="button"
+            className="lang-toggle"
+            aria-label={t('header.langAria')}
+            onClick={toggleLang}
+          >
+            {t('header.langLabel')}
+          </button>
+        </div>
       </header>
       <main className="app-main">
         <div className="top-row">
-          <section aria-label="导入与状态" className="import-card">
+          <section aria-label={t('app.importAria')} className="import-card">
             {/* Import stays enabled during analysis: a new file supersedes
                 (terminates) the in-flight request. */}
             <DropZone onFile={(file) => analyze(file)} disabled={false} />
             {loading !== null && (
               <div className="progress-panel" aria-live="polite">
                 <p>
-                  正在分析 {loading.fileName}：{PHASE_LABELS[loading.phase]}（
-                  {Math.round(loading.progress * 100)}%）
+                  {t('app.analyzing', {
+                    name: loading.fileName,
+                    phase: t(PHASE_KEYS[loading.phase]),
+                    pct: Math.round(loading.progress * 100),
+                  })}
                 </p>
                 <progress max={1} value={loading.progress} />
                 <button type="button" onClick={cancel}>
-                  取消
+                  {t('app.cancel')}
                 </button>
               </div>
             )}
@@ -233,84 +257,86 @@ export default function App() {
               <ErrorBanner message={error} onDismiss={() => setError(null)} />
             )}
           </section>
-          {analyzed !== null && result !== null && (
-            <>
-              <FileSummary fileName={analyzed.fileName} result={result} />
-              <AnalyzerControls
-                settings={result.settings}
-                onApply={reanalyze}
-                disabled={loading !== null}
-              />
-            </>
-          )}
+          {/* Cards stay visible before import; values show '-' instead. */}
+          <FileSummary
+            fileName={analyzed?.fileName ?? null}
+            result={result}
+          />
+          <AnalyzerControls
+            settings={result?.settings ?? null}
+            onApply={reanalyze}
+            disabled={loading !== null || !hasData}
+          />
         </div>
 
-        {analyzed !== null && result !== null && (
-          <>
-            <WaveformChart
-              overview={analyzed.overview}
-              digital={analyzed.digital}
-              frames={result.frames}
-              selectedIndex={selectedFrame}
-              onSelectFrame={setSelectedFrame}
-              sampleRateHz={result.metadata.sampleRateHz}
-              unit={result.metadata.unit}
-              threshold={result.settings.thresholdMv}
-              levels={result.levels}
-            />
-            {result.errors.length > 0 && (
-              <section aria-label="捕获级错误" className="capture-errors">
-                <h3>捕获级错误</h3>
-                <ul>
-                  {result.errors.map((decodeError) => (
-                    <li key={`${decodeError.code}-${decodeError.startSample}`}>
-                      <strong>{decodeError.code}</strong>：
-                      {decodeError.message}（样本 {decodeError.startSample} –{' '}
-                      {decodeError.endSample}）
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            <div className="inspect-split">
-              <FrameTable
-                frames={result.frames}
-                selectedIndex={selectedFrame}
-                onSelect={setSelectedFrame}
-                sampleRateHz={result.metadata.sampleRateHz}
-                actions={
-                  <>
-                    {/* Export lives in the frame card's top-right corner;
-                        labels state explicitly that ALL frames export. */}
-                    <button
-                      type="button"
-                      onClick={exportJson}
-                      disabled={loading !== null}
-                    >
-                      导出全部帧 JSON
-                    </button>
-                    <button
-                      type="button"
-                      onClick={exportCsv}
-                      disabled={loading !== null}
-                    >
-                      导出全部帧 CSV
-                    </button>
-                  </>
-                }
-              />
-              <FrameDetails
-                frame={
-                  selectedFrame === null
-                    ? null
-                    : (result.frames.find((f) => f.index === selectedFrame) ??
-                      null)
-                }
-                sampleRateHz={result.metadata.sampleRateHz}
-              />
-            </div>
-          </>
+        <WaveformChart
+          overview={analyzed?.overview ?? null}
+          digital={analyzed?.digital ?? null}
+          frames={result?.frames ?? []}
+          selectedIndex={selectedFrame}
+          onSelectFrame={setSelectedFrame}
+          sampleRateHz={result?.metadata.sampleRateHz ?? 1}
+          unit={result?.metadata.unit ?? 'mV'}
+          threshold={result?.settings.thresholdMv ?? 0}
+          levels={result?.levels ?? null}
+        />
+        {result !== null && result.errors.length > 0 && (
+          <section aria-label={t('app.captureErrors')} className="capture-errors">
+            <h3>{t('app.captureErrors')}</h3>
+            <ul>
+              {result.errors.map((decodeError) => (
+                <li key={`${decodeError.code}-${decodeError.startSample}`}>
+                  <strong>{decodeError.code}</strong>
+                  {t('colon')}
+                  {decodeError.message}
+                  {t('sampleSpan', {
+                    start: decodeError.startSample,
+                    end: decodeError.endSample,
+                  })}
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
+        <div className="inspect-split">
+          <FrameTable
+            frames={result?.frames ?? []}
+            selectedIndex={selectedFrame}
+            onSelect={setSelectedFrame}
+            sampleRateHz={result?.metadata.sampleRateHz ?? 1}
+            placeholder={!hasData}
+            actions={
+              <>
+                {/* Export lives in the frame card's top-right corner;
+                    labels state explicitly that ALL frames export. */}
+                <button
+                  type="button"
+                  onClick={exportJson}
+                  disabled={loading !== null || !hasData}
+                >
+                  {t('app.exportJson')}
+                </button>
+                <button
+                  type="button"
+                  onClick={exportCsv}
+                  disabled={loading !== null || !hasData}
+                >
+                  {t('app.exportCsv')}
+                </button>
+              </>
+            }
+          />
+          <FrameDetails
+            frame={
+              selectedFrame === null || result === null
+                ? null
+                : (result.frames.find((f) => f.index === selectedFrame) ??
+                  null)
+            }
+            sampleRateHz={result?.metadata.sampleRateHz ?? 1}
+            placeholder={!hasData}
+          />
+        </div>
       </main>
       <footer className="app-footer">
         <p>MIT Licensed · Classic CAN 2.0A/2.0B · v0.1.0</p>

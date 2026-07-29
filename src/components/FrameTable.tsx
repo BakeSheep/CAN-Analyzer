@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { useI18n } from '../app/i18n'
 import type { CanFrame } from '../core/types'
 
 interface FrameTableProps {
@@ -9,6 +10,8 @@ interface FrameTableProps {
   sampleRateHz?: number
   /** Extra toolbar content (e.g. export buttons), top-right of the card. */
   actions?: ReactNode
+  /** No CSV imported yet: keep the card visible, show dashes. */
+  placeholder?: boolean
 }
 
 export function frameStatus(frame: CanFrame): 'ok' | 'error' {
@@ -28,7 +31,9 @@ export function FrameTable({
   onSelect,
   sampleRateHz = 1,
   actions,
+  placeholder = false,
 }: FrameTableProps) {
+  const { t } = useI18n()
   const [idFilter, setIdFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'ok' | 'error'>(
     'all',
@@ -46,60 +51,73 @@ export function FrameTable({
   }, [frames, idFilter, statusFilter])
 
   return (
-    <section aria-label="解码帧列表" className="frame-table">
+    <section aria-label={t('table.aria')} className="frame-table">
       <div className="frame-table-filters">
         <div className="control-field">
-          <label htmlFor="frame-filter-id">按 ID 过滤（HEX）</label>
+          <label htmlFor="frame-filter-id">{t('table.filterId')}</label>
           <input
             id="frame-filter-id"
             type="text"
             value={idFilter}
             onChange={(e) => setIdFilter(e.target.value)}
-            placeholder="如 123"
+            placeholder={t('table.filterIdPlaceholder')}
+            disabled={placeholder}
           />
         </div>
         <div className="control-field">
-          <label htmlFor="frame-filter-status">按状态过滤</label>
+          <label htmlFor="frame-filter-status">{t('table.filterStatus')}</label>
           <select
             id="frame-filter-status"
             value={statusFilter}
             onChange={(e) =>
               setStatusFilter(e.target.value as 'all' | 'ok' | 'error')
             }
+            disabled={placeholder}
           >
-            <option value="all">全部</option>
-            <option value="ok">正常</option>
-            <option value="error">错误</option>
+            <option value="all">{t('table.all')}</option>
+            <option value="ok">{t('table.ok')}</option>
+            <option value="error">{t('table.error')}</option>
           </select>
         </div>
         <p className="frame-table-count">
-          {visible.length} / {frames.length} 帧
+          {placeholder
+            ? t('table.count', { visible: '-', total: '-' })
+            : t('table.count', {
+                visible: visible.length,
+                total: frames.length,
+              })}
         </p>
         {actions !== undefined && (
           <div className="frame-table-actions">{actions}</div>
         )}
       </div>
-      {visible.length === 0 ? (
+      {placeholder ? (
+        <p className="frame-table-empty">-</p>
+      ) : visible.length === 0 ? (
         <p className="frame-table-empty">
           {frames.length === 0
-            ? '未解码出任何帧。请检查比特率、极性与阈值设置。'
-            : '没有匹配当前过滤条件的帧。'}
+            ? t('table.emptyNoFrames')
+            : t('table.emptyNoMatch')}
         </p>
       ) : (
-        <div className="frame-table-scroll" role="region" aria-label="帧数据">
+        <div
+          className="frame-table-scroll"
+          role="region"
+          aria-label={t('table.dataAria')}
+        >
           <table>
             <thead>
               <tr>
                 <th scope="col">#</th>
-                <th scope="col">起始时间</th>
+                <th scope="col">{t('table.colStart')}</th>
                 <th scope="col">ID</th>
-                <th scope="col">格式</th>
-                <th scope="col">类型</th>
+                <th scope="col">{t('table.colFormat')}</th>
+                <th scope="col">{t('table.colType')}</th>
                 <th scope="col">DLC</th>
-                <th scope="col">数据</th>
+                <th scope="col">{t('table.colData')}</th>
                 <th scope="col">CRC</th>
                 <th scope="col">ACK</th>
-                <th scope="col">状态</th>
+                <th scope="col">{t('table.colStatus')}</th>
               </tr>
             </thead>
             <tbody>
@@ -124,15 +142,19 @@ export function FrameTable({
                     {((frame.startSample / sampleRateHz) * 1e3).toFixed(4)} ms
                   </td>
                   <td className="mono">{frame.idHex}</td>
-                  <td>{frame.format === 'extended' ? '扩展' : '标准'}</td>
-                  <td>{frame.rtr ? '远程' : '数据'}</td>
+                  <td>
+                    {frame.format === 'extended'
+                      ? t('table.extended')
+                      : t('table.standard')}
+                  </td>
+                  <td>{frame.rtr ? t('table.remote') : t('table.dataFrame')}</td>
                   <td>{frame.dlc}</td>
                   <td className="mono">{formatDataHex(frame.data)}</td>
                   <td className="mono">
                     {frame.crc.toString(16).toUpperCase().padStart(4, '0')}
                     {frame.crcValid ? ' ✓' : ' ✗'}
                   </td>
-                  <td>{frame.acknowledged ? '有' : '无'}</td>
+                  <td>{frame.acknowledged ? t('table.ackYes') : t('table.ackNo')}</td>
                   <td
                     className={
                       frameStatus(frame) === 'ok'
@@ -141,8 +163,8 @@ export function FrameTable({
                     }
                   >
                     {frameStatus(frame) === 'ok'
-                      ? '✓ 正常'
-                      : `✗ ${frame.errors[0]?.code ?? '错误'}`}
+                      ? t('table.statusOk')
+                      : `✗ ${frame.errors[0]?.code ?? t('table.errorFallback')}`}
                   </td>
                 </tr>
               ))}

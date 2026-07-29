@@ -1,8 +1,10 @@
+import { useI18n } from '../app/i18n'
 import type { AnalysisResult } from '../core/types'
 
 interface FileSummaryProps {
-  fileName: string
-  result: AnalysisResult
+  /** `null` before any CSV has been imported (placeholder mode). */
+  fileName: string | null
+  result: AnalysisResult | null
 }
 
 function formatHz(hz: number): string {
@@ -25,35 +27,58 @@ function formatDuration(seconds: number): string {
 
 /** Capture metadata, detected levels, and analysis settings at a glance. */
 export function FileSummary({ fileName, result }: FileSummaryProps) {
-  const { metadata, levels, settings, warnings } = result
-  const duration =
-    metadata.sampleRateHz > 0 ? metadata.sampleCount / metadata.sampleRateHz : 0
-  const unit = metadata.unit
+  const { t } = useI18n()
 
-  const items: Array<[string, string]> = [
-    ['采样率', formatHz(metadata.sampleRateHz)],
-    ['样本数', metadata.sampleCount.toLocaleString()],
-    ['时长', formatDuration(duration)],
-    [
-      '电压范围',
-      `${metadata.min.toFixed(1)} ~ ${metadata.max.toFixed(1)} ${unit}`,
-    ],
-    [
-      '检测电平',
-      `低 ${levels.lowLevel.toFixed(0)} / 高 ${levels.highLevel.toFixed(0)} ${unit}`,
-    ],
-    ['判决阈值', `${settings.thresholdMv.toFixed(0)} ${unit}`],
-    [
-      '比特率',
-      `${formatBitrate(settings.bitrateBps)}${settings.manualBitrate ? '（手动）' : '（自动）'}`,
-    ],
-    ['极性', settings.invertPolarity ? '反转' : '正常'],
-    ['电平置信度', `${(levels.confidence * 100).toFixed(0)} %`],
+  const labels = [
+    t('summary.sampleRate'),
+    t('summary.sampleCount'),
+    t('summary.duration'),
+    t('summary.voltageRange'),
+    t('summary.levels'),
+    t('summary.threshold'),
+    t('summary.bitrate'),
+    t('summary.polarity'),
+    t('summary.confidence'),
   ]
 
+  let values: string[]
+  let warnings: string[] = []
+  if (result === null) {
+    // Cards stay visible before import; every value is a dash.
+    values = labels.map(() => '-')
+  } else {
+    const { metadata, levels, settings } = result
+    warnings = result.warnings
+    const duration =
+      metadata.sampleRateHz > 0
+        ? metadata.sampleCount / metadata.sampleRateHz
+        : 0
+    const unit = metadata.unit
+    values = [
+      formatHz(metadata.sampleRateHz),
+      metadata.sampleCount.toLocaleString(),
+      formatDuration(duration),
+      `${metadata.min.toFixed(1)} ~ ${metadata.max.toFixed(1)} ${unit}`,
+      t('summary.levelsValue', {
+        low: levels.lowLevel.toFixed(0),
+        high: levels.highLevel.toFixed(0),
+        unit,
+      }),
+      `${settings.thresholdMv.toFixed(0)} ${unit}`,
+      `${formatBitrate(settings.bitrateBps)}${settings.manualBitrate ? t('summary.manual') : t('summary.auto')}`,
+      settings.invertPolarity ? t('summary.inverted') : t('summary.normal'),
+      `${(levels.confidence * 100).toFixed(0)} %`,
+    ]
+  }
+
+  const items: Array<[string, string]> = labels.map((label, i) => [
+    label,
+    values[i],
+  ])
+
   return (
-    <section aria-label="文件摘要" className="file-summary">
-      <h2 className="file-summary-name">{fileName}</h2>
+    <section aria-label={t('summary.aria')} className="file-summary">
+      <h2 className="file-summary-name">{fileName ?? '-'}</h2>
       <dl className="file-summary-grid">
         {items.map(([label, value]) => (
           <div key={label} className="file-summary-item">
@@ -63,7 +88,7 @@ export function FileSummary({ fileName, result }: FileSummaryProps) {
         ))}
       </dl>
       {warnings.length > 0 && (
-        <ul className="file-summary-warnings" aria-label="分析警告">
+        <ul className="file-summary-warnings" aria-label={t('summary.warningsAria')}>
           {warnings.map((warning) => (
             <li key={warning}>⚠ {warning}</li>
           ))}

@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react'
+import { useI18n } from '../app/i18n'
 import { COMMON_BITRATES } from '../core/bitrateDetector'
 import type { AnalysisSettings } from '../core/types'
 import type { AnalyzeSettings } from '../workers/protocol'
 
 interface AnalyzerControlsProps {
-  settings: AnalysisSettings
+  /** `null` before any CSV has been imported (placeholder mode). */
+  settings: AnalysisSettings | null
   onApply: (overrides: AnalyzeSettings) => void
   disabled: boolean
 }
@@ -15,6 +17,7 @@ export function AnalyzerControls({
   onApply,
   disabled,
 }: AnalyzerControlsProps) {
+  const { t } = useI18n()
   const [bitrate, setBitrate] = useState<string>('auto')
   const [customBitrate, setCustomBitrate] = useState<string>('')
   const [customError, setCustomError] = useState<string | null>(null)
@@ -33,7 +36,7 @@ export function AnalyzerControls({
       if (customBitrate.trim() === '' || !Number.isFinite(parsed) || parsed <= 0) {
         // Never silently fall back to auto detection: block the submit
         // and surface a field-level error instead.
-        setCustomError('请输入大于 0 的自定义比特率（bit/s）。')
+        setCustomError(t('controls.customBitrateError'))
         invalid = true
       } else {
         setCustomError(null)
@@ -45,7 +48,7 @@ export function AnalyzerControls({
     if (threshold.trim() !== '') {
       const parsed = Number(threshold)
       if (!Number.isFinite(parsed)) {
-        setThresholdError('阈值必须是有限数值（mV，可为负）。')
+        setThresholdError(t('controls.thresholdError'))
         invalid = true
       } else {
         setThresholdError(null)
@@ -57,7 +60,7 @@ export function AnalyzerControls({
       if (!Number.isFinite(parsed) || parsed < 0) {
         // A negative or non-finite band must block the submit, not be
         // silently dropped while the analysis still runs.
-        setHysteresisError('滞回带必须是不小于 0 的数值（mV）。')
+        setHysteresisError(t('controls.hysteresisError'))
         invalid = true
       } else {
         setHysteresisError(null)
@@ -73,19 +76,23 @@ export function AnalyzerControls({
   return (
     <form
       className="analyzer-controls"
-      aria-label="分析设置"
+      aria-label={t('controls.aria')}
       noValidate
       onSubmit={handleSubmit}
     >
       <div className="control-field">
-        <label htmlFor="control-bitrate">比特率</label>
+        <label htmlFor="control-bitrate">{t('controls.bitrate')}</label>
         <select
           id="control-bitrate"
           value={bitrate}
           onChange={(e) => setBitrate(e.target.value)}
           disabled={disabled}
         >
-          <option value="auto">自动检测（当前 {settings.bitrateBps}）</option>
+          <option value="auto">
+            {t('controls.autoDetect', {
+              current: settings?.bitrateBps ?? '-',
+            })}
+          </option>
           {COMMON_BITRATES.map((rate) => (
             <option key={rate} value={rate}>
               {rate >= 1_000_000
@@ -93,12 +100,14 @@ export function AnalyzerControls({
                 : `${rate / 1_000} kbit/s`}
             </option>
           ))}
-          <option value="custom">自定义…</option>
+          <option value="custom">{t('controls.custom')}</option>
         </select>
       </div>
       {bitrate === 'custom' && (
         <div className="control-field">
-          <label htmlFor="control-custom-bitrate">自定义比特率 (bit/s)</label>
+          <label htmlFor="control-custom-bitrate">
+            {t('controls.customBitrate')}
+          </label>
           <input
             id="control-custom-bitrate"
             type="number"
@@ -127,11 +136,11 @@ export function AnalyzerControls({
         </div>
       )}
       <div className="control-field">
-        <label htmlFor="control-threshold">判决阈值 (mV)</label>
+        <label htmlFor="control-threshold">{t('controls.threshold')}</label>
         <input
           id="control-threshold"
           type="number"
-          placeholder={settings.thresholdMv.toFixed(0)}
+          placeholder={settings?.thresholdMv.toFixed(0) ?? '-'}
           aria-invalid={thresholdError !== null}
           aria-describedby={
             thresholdError !== null ? 'control-threshold-error' : undefined
@@ -154,12 +163,12 @@ export function AnalyzerControls({
         )}
       </div>
       <div className="control-field">
-        <label htmlFor="control-hysteresis">滞回带 (mV)</label>
+        <label htmlFor="control-hysteresis">{t('controls.hysteresis')}</label>
         <input
           id="control-hysteresis"
           type="number"
           min={0}
-          placeholder={settings.hysteresisMv.toFixed(0)}
+          placeholder={settings?.hysteresisMv.toFixed(0) ?? '-'}
           aria-invalid={hysteresisError !== null}
           aria-describedby={
             hysteresisError !== null ? 'control-hysteresis-error' : undefined
@@ -182,20 +191,20 @@ export function AnalyzerControls({
         )}
       </div>
       <div className="control-field">
-        <label htmlFor="control-polarity">极性</label>
+        <label htmlFor="control-polarity">{t('controls.polarity')}</label>
         <select
           id="control-polarity"
           value={polarity}
           onChange={(e) => setPolarity(e.target.value)}
           disabled={disabled}
         >
-          <option value="auto">自动（解码成功率确认）</option>
-          <option value="normal">正常</option>
-          <option value="invert">反转</option>
+          <option value="auto">{t('controls.polarityAuto')}</option>
+          <option value="normal">{t('controls.polarityNormal')}</option>
+          <option value="invert">{t('controls.polarityInvert')}</option>
         </select>
       </div>
       <button type="submit" disabled={disabled}>
-        重新分析
+        {t('controls.reanalyze')}
       </button>
     </form>
   )

@@ -1,51 +1,72 @@
+import { useI18n, type MessageKey } from '../app/i18n'
 import type { CanFieldName, CanFrame } from '../core/types'
 import { formatDataHex } from './FrameTable'
 
 interface FrameDetailsProps {
   frame: CanFrame | null
   sampleRateHz: number
+  /** No CSV imported yet: keep the card visible, show a dash. */
+  placeholder?: boolean
 }
 
-const FIELD_LABELS: Record<CanFieldName, string> = {
-  sof: 'SOF（帧起始）',
-  arbitration: '仲裁段',
-  control: '控制段',
-  data: '数据段',
-  crc: 'CRC 段',
-  ack: 'ACK 段',
-  eof: 'EOF（帧结束）',
+const FIELD_LABEL_KEYS: Record<CanFieldName, MessageKey> = {
+  sof: 'field.sof',
+  arbitration: 'field.arbitration',
+  control: 'field.control',
+  data: 'field.data',
+  crc: 'field.crc',
+  ack: 'field.ack',
+  eof: 'field.eof',
 }
 
 /** Field spans, payload, and error list for the selected frame. */
-export function FrameDetails({ frame, sampleRateHz }: FrameDetailsProps) {
+export function FrameDetails({
+  frame,
+  sampleRateHz,
+  placeholder = false,
+}: FrameDetailsProps) {
+  const { t } = useI18n()
+
   if (frame === null) {
     return (
       <section
-        aria-label="帧详情"
+        aria-label={t('details.aria')}
         className="frame-details"
         data-testid="frame-details"
       >
-        <p className="frame-details-empty">在表格或波形中选择一个帧查看详情。</p>
+        <p className="frame-details-empty">
+          {placeholder ? '-' : t('details.empty')}
+        </p>
       </section>
     )
   }
 
   const toMs = (sample: number) => ((sample / sampleRateHz) * 1e3).toFixed(4)
 
+  const kind = frame.format === 'extended'
+    ? frame.rtr
+      ? t('details.kindExtendedRemote')
+      : t('details.kindExtendedData')
+    : frame.rtr
+      ? t('details.kindStandardRemote')
+      : t('details.kindStandardData')
+
   return (
     <section
-      aria-label="帧详情"
+      aria-label={t('details.aria')}
       className="frame-details"
       data-testid="frame-details"
     >
       <h3>
-        帧 #{frame.index} · ID {frame.idHex} ·{' '}
-        {frame.format === 'extended' ? '扩展' : '标准'}
-        {frame.rtr ? '远程帧' : '数据帧'}
+        {t('details.heading', {
+          index: frame.index,
+          id: frame.idHex,
+          kind,
+        })}
       </h3>
       <dl className="frame-details-grid">
         <div>
-          <dt>时间范围</dt>
+          <dt>{t('details.timeRange')}</dt>
           <dd className="mono">
             {toMs(frame.startSample)} – {toMs(frame.endSample)} ms
           </dd>
@@ -55,38 +76,38 @@ export function FrameDetails({ frame, sampleRateHz }: FrameDetailsProps) {
           <dd>{frame.dlc}</dd>
         </div>
         <div>
-          <dt>数据</dt>
+          <dt>{t('details.data')}</dt>
           <dd className="mono">
-            {frame.data.length > 0 ? formatDataHex(frame.data) : '（无）'}
+            {frame.data.length > 0 ? formatDataHex(frame.data) : t('details.none')}
           </dd>
         </div>
         <div>
           <dt>CRC</dt>
           <dd className="mono">
             0x{frame.crc.toString(16).toUpperCase().padStart(4, '0')}{' '}
-            {frame.crcValid ? '✓ 校验通过' : '✗ 校验失败'}
+            {frame.crcValid ? t('details.crcValid') : t('details.crcInvalid')}
           </dd>
         </div>
         <div>
           <dt>ACK</dt>
-          <dd>{frame.acknowledged ? '✓ 已应答' : '✗ 无应答'}</dd>
+          <dd>{frame.acknowledged ? t('details.ackYes') : t('details.ackNo')}</dd>
         </div>
       </dl>
 
-      <h4>字段区间</h4>
+      <h4>{t('details.fieldSpans')}</h4>
       <table className="frame-details-fields">
         <thead>
           <tr>
-            <th scope="col">字段</th>
-            <th scope="col">起始 (ms)</th>
-            <th scope="col">结束 (ms)</th>
-            <th scope="col">样本区间</th>
+            <th scope="col">{t('details.colField')}</th>
+            <th scope="col">{t('details.colStart')}</th>
+            <th scope="col">{t('details.colEnd')}</th>
+            <th scope="col">{t('details.colSamples')}</th>
           </tr>
         </thead>
         <tbody>
           {frame.fields.map((span) => (
             <tr key={span.field}>
-              <td>{FIELD_LABELS[span.field]}</td>
+              <td>{t(FIELD_LABEL_KEYS[span.field])}</td>
               <td className="mono">{toMs(span.startSample)}</td>
               <td className="mono">{toMs(span.endSample)}</td>
               <td className="mono">
@@ -99,12 +120,17 @@ export function FrameDetails({ frame, sampleRateHz }: FrameDetailsProps) {
 
       {frame.errors.length > 0 && (
         <>
-          <h4>帧错误</h4>
+          <h4>{t('details.frameErrors')}</h4>
           <ul className="frame-details-errors">
             {frame.errors.map((error) => (
               <li key={`${error.code}-${error.startSample}`}>
-                <strong>{error.code}</strong>：{error.message}（样本{' '}
-                {error.startSample} – {error.endSample}）
+                <strong>{error.code}</strong>
+                {t('colon')}
+                {error.message}
+                {t('sampleSpan', {
+                  start: error.startSample,
+                  end: error.endSample,
+                })}
               </li>
             ))}
           </ul>

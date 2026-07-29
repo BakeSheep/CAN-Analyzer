@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useRef } from 'react'
 import uPlot from 'uplot'
+import { useI18n } from '../app/i18n'
 import type { CanFrame, SignalLevels } from '../core/types'
 import type { DigitalSeries, OverviewSeries } from '../workers/protocol'
 
 interface WaveformChartProps {
-  overview: OverviewSeries
-  digital: DigitalSeries
+  /** `null` before any CSV has been imported (placeholder mode). */
+  overview: OverviewSeries | null
+  digital: DigitalSeries | null
   frames: CanFrame[]
   selectedIndex: number | null
   onSelectFrame: (index: number) => void
   sampleRateHz: number
   unit: string
   threshold: number
-  levels: SignalLevels
+  levels: SignalLevels | null
 }
 
 const FRAME_OK_COLOR = 'rgba(11, 95, 165, 0.18)'
@@ -60,6 +62,7 @@ export function WaveformChart({
   threshold,
   levels,
 }: WaveformChartProps) {
+  const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const framesRef = useRef(frames)
@@ -75,6 +78,9 @@ export function WaveformChart({
   }, [sampleRateHz])
 
   const data = useMemo((): uPlot.AlignedData => {
+    if (overview === null) {
+      return [[], [], []] as unknown as uPlot.AlignedData
+    }
     const n = overview.bucketStart.length
     const x = new Float64Array(n)
     for (let i = 0; i < n; i += 1) x[i] = toMs(overview.bucketStart[i])
@@ -83,7 +89,14 @@ export function WaveformChart({
 
   useEffect(() => {
     const container = containerRef.current
-    if (container === null) return
+    if (
+      container === null ||
+      overview === null ||
+      digital === null ||
+      levels === null
+    ) {
+      return
+    }
 
     const msPerSample = 1e3 / sampleRateHz
 
@@ -229,18 +242,18 @@ export function WaveformChart({
       axes: [
         // Extra gap keeps room for the frame strip between the axis
         // line and the tick numbers.
-        { label: `时间 (ms)`, gap: 26 },
-        { label: `电压 (${unit})` },
+        { label: t('chart.time'), gap: 26 },
+        { label: t('chart.voltage', { unit }) },
       ],
       series: [
-        { label: '时间 (ms)' },
+        { label: t('chart.time') },
         {
-          label: `最小值 (${unit})`,
+          label: t('chart.min', { unit }),
           stroke: '#0b5fa5',
           width: 1,
         },
         {
-          label: `最大值 (${unit})`,
+          label: t('chart.max', { unit }),
           stroke: '#4b8ecb',
           width: 1,
         },
@@ -297,8 +310,8 @@ export function WaveformChart({
       plot.destroy()
       plotRef.current = null
     }
-    // Recreate the plot when the underlying capture changes.
-  }, [data, unit, threshold, toMs, digital, levels, sampleRateHz])
+    // Recreate the plot when the underlying capture (or language) changes.
+  }, [data, unit, threshold, toMs, digital, levels, sampleRateHz, overview, t])
 
   // Selecting a frame zooms the chart to its span (with margin).
   useEffect(() => {
@@ -316,7 +329,7 @@ export function WaveformChart({
 
   const resetZoom = () => {
     const plot = plotRef.current
-    if (plot === null) return
+    if (plot === null || overview === null) return
     plot.setScale('x', {
       min: 0,
       max: toMs(overview.sampleCount),
@@ -324,21 +337,26 @@ export function WaveformChart({
   }
 
   return (
-    <section aria-label="波形视图" className="waveform-chart">
+    <section aria-label={t('chart.aria')} className="waveform-chart">
       <div className="waveform-toolbar">
-        <button type="button" onClick={resetZoom}>
-          重置缩放
+        <button type="button" onClick={resetZoom} disabled={overview === null}>
+          {t('chart.resetZoom')}
         </button>
-        <p className="waveform-hint">
-          拖动框选可缩放；点击帧覆盖区或轴下帧色块可在表格中定位对应帧。
-        </p>
+        <p className="waveform-hint">{t('chart.hint')}</p>
         <p className="frame-timeline-legend">
-          <span className="legend-swatch ack" aria-hidden="true" /> 已应答
-          <span className="legend-swatch noack" aria-hidden="true" /> 无应答
-          <span className="legend-swatch error" aria-hidden="true" /> 错误
+          <span className="legend-swatch ack" aria-hidden="true" />{' '}
+          {t('chart.ack')}
+          <span className="legend-swatch noack" aria-hidden="true" />{' '}
+          {t('chart.noack')}
+          <span className="legend-swatch error" aria-hidden="true" />{' '}
+          {t('chart.error')}
         </p>
       </div>
-      <div ref={containerRef} className="waveform-container" />
+      {overview === null ? (
+        <div className="waveform-container waveform-placeholder">-</div>
+      ) : (
+        <div ref={containerRef} className="waveform-container" />
+      )}
     </section>
   )
 }
