@@ -393,6 +393,24 @@ describe('FrameTimeline', () => {
     expect(screen.getByText('0.200 ms')).toBeInTheDocument()
   })
 
+  it('shows 0x-prefixed frame IDs aligned on the axis between line and ticks', () => {
+    render(
+      <FrameTimeline
+        frames={frames}
+        sampleCount={10_000}
+        sampleRateHz={50_000_000}
+        selectedIndex={null}
+        onSelect={() => {}}
+      />,
+    )
+    const id = screen.getByText('0x456')
+    expect(id).toBeInTheDocument()
+    // Center of frame 1 (3000..4000 of 10000) → 35% along the axis.
+    expect(id).toHaveStyle({ left: '35%' })
+    expect(screen.getByText('0x123')).toBeInTheDocument()
+    expect(screen.getByText('0x789')).toBeInTheDocument()
+  })
+
   it('selects a frame on click and marks the selection', async () => {
     const onSelect = vi.fn()
     const { rerender } = render(

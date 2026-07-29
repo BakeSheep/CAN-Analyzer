@@ -64,7 +64,8 @@ body {
   border-bottom: 1px solid var(--color-border);
   padding: 0.75rem 1.5rem;
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
 }
@@ -84,6 +85,23 @@ body {
   margin-right: 0.5em;
   background: var(--color-accent);
   clip-path: polygon(0 100%, 25% 100%, 25% 0, 75% 0, 75% 100%, 100% 100%);
+}
+
+.github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.github-link:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .app-main {
@@ -107,17 +125,41 @@ body {
 }
 
 /* --- Import area ------------------------------------------------ */
+.top-row {
+  display: flex;
+  gap: 1rem;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.import-card {
+  flex: 0 1 280px;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.top-row .file-summary {
+  flex: 1 1 340px;
+}
+
+.top-row .analyzer-controls {
+  flex: 0 1 300px;
+  min-width: 240px;
+}
+
 .drop-zone {
   background: var(--color-surface);
   border: 2px dashed var(--color-border);
   border-radius: 8px;
-  padding: 1rem 1.25rem;
+  padding: 1.25rem 1rem;
+  flex: 1;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
-  flex-wrap: wrap;
+  gap: 0.75rem;
   text-align: center;
 }
 
@@ -130,9 +172,8 @@ body {
   opacity: 0.6;
 }
 
-.drop-zone-hint,
-.drop-zone-privacy {
-  margin: 0.25rem 0;
+.drop-zone-hint {
+  margin: 0;
   color: var(--color-text-muted);
   font-size: 0.9rem;
 }
@@ -187,12 +228,6 @@ body {
 }
 
 /* --- Summary and controls ---------------------------------------- */
-.summary-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 1rem;
-}
-
 .file-summary,
 .analyzer-controls,
 .waveform-chart,
@@ -359,13 +394,32 @@ button:disabled {
   outline-offset: 1px;
 }
 
+/* Frame ID labels: between the axis line and the tick numbers,
+   center-aligned with each frame's span on the axis. */
+.frame-timeline-ids {
+  position: relative;
+  height: 1.05rem;
+  margin-top: 1px;
+}
+
 .frame-timeline-id {
-  display: block;
-  padding: 0 2px;
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 0.68rem;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-family: 'Cascadia Mono', Consolas, monospace;
+}
+
+.frame-timeline-id.ack {
+  color: var(--color-ok);
+}
+
+.frame-timeline-id.noack {
+  color: var(--color-accent);
+}
+
+.frame-timeline-id.error {
+  color: var(--color-danger);
 }
 
 .frame-timeline-axis {
@@ -545,9 +599,15 @@ button:disabled {
 
 /* --- Responsive ----------------------------------------------------- */
 @media (max-width: 900px) {
-  .summary-row,
+  .top-row,
   .inspect-split {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .import-card,
+  .top-row .analyzer-controls {
+    flex: 1 1 auto;
   }
 
   .app-main {

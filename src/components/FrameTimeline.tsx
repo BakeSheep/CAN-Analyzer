@@ -63,12 +63,27 @@ export function FrameTimeline({
                 frame.index === selectedIndex ? ' selected' : ''
               }`}
               style={{ left: `${left}%`, width: `${width}%` }}
-              title={`帧 #${frame.index} · ID ${frame.idHex} · ${startMs} ms · ${STATUS_LABEL[status]}`}
-              aria-label={`帧 ${frame.index}，ID ${frame.idHex}，${startMs} 毫秒，${STATUS_LABEL[status]}`}
+              title={`帧 #${frame.index} · ID 0x${frame.idHex} · ${startMs} ms · ${STATUS_LABEL[status]}`}
+              aria-label={`帧 ${frame.index}，ID 0x${frame.idHex}，${startMs} 毫秒，${STATUS_LABEL[status]}`}
               onClick={() => onSelect(frame.index)}
+            />
+          )
+        })}
+      </div>
+      {/* Frame IDs sit between the axis line and its tick numbers,
+          center-aligned with each frame's position on the axis. */}
+      <div className="frame-timeline-ids">
+        {frames.map((frame) => {
+          const center =
+            (toPercent(frame.startSample) + toPercent(frame.endSample)) / 2
+          return (
+            <span
+              key={frame.index}
+              className={`frame-timeline-id ${timelineStatus(frame)}`}
+              style={{ left: `${center}%` }}
             >
-              <span className="frame-timeline-id">{frame.idHex}</span>
-            </button>
+              0x{frame.idHex}
+            </span>
           )
         })}
       </div>

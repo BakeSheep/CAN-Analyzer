@@ -49,7 +49,6 @@ export function DropZone({ onFile, disabled }: DropZoneProps) {
           disabled={disabled}
         />
       </label>
-      <p className="drop-zone-privacy">文件仅在本地浏览器中解析，不会上传。</p>
     </div>
   )
 }
