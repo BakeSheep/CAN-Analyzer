@@ -20,6 +20,27 @@ const FRAME_ERROR_COLOR = 'rgba(179, 38, 30, 0.22)'
 const FRAME_SELECTED_COLOR = 'rgba(11, 95, 165, 0.38)'
 /** Skip the exact overlay when more runs than this are visible. */
 const MAX_VISIBLE_RUNS = 4000
+/** Frame strip between the x-axis line and its tick numbers (CSS px). */
+const STRIP_TOP_CSS = 3
+const STRIP_HEIGHT_CSS = 14
+
+type StripStatus = 'ack' | 'noack' | 'error'
+
+function stripStatus(frame: CanFrame): StripStatus {
+  if (frame.errors.length > 0 || !frame.crcValid) return 'error'
+  return frame.acknowledged ? 'ack' : 'noack'
+}
+
+const STRIP_COLORS: Record<StripStatus, string> = {
+  ack: '#1a6b3c',
+  noack: '#0b5fa5',
+  error: '#b3261e',
+}
+
+/** Unpadded hex label, e.g. 0x100 instead of 0x00000100. */
+function frameIdLabel(frame: CanFrame): string {
+  return `0x${frame.id.toString(16).toUpperCase()}`
+}
 
 /**
  * uPlot waveform: decimated min/max envelope, threshold line, and
@@ -159,6 +180,46 @@ export function WaveformChart({
       ctx.restore()
     }
 
+    /**
+     * Frame strip drawn directly under the x-axis line, in the gap before
+     * the tick numbers, so it stays aligned with the axis at every zoom
+     * level. Green = acknowledged, blue = no ACK, red = error.
+     */
+    const drawFrameStrip = (u: uPlot) => {
+      const ctx = u.ctx
+      if (!ctx) return
+      const dpr = window.devicePixelRatio || 1
+      const left = u.bbox.left
+      const right = u.bbox.left + u.bbox.width
+      const yTop = u.bbox.top + u.bbox.height + STRIP_TOP_CSS * dpr
+      const stripHeight = STRIP_HEIGHT_CSS * dpr
+      ctx.save()
+      ctx.font = `${10 * dpr}px 'Cascadia Mono', Consolas, monospace`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      for (const frame of framesRef.current) {
+        let x0 = u.valToPos(toMs(frame.startSample), 'x', true)
+        let x1 = u.valToPos(toMs(frame.endSample), 'x', true)
+        if (x1 < left || x0 > right) continue
+        x0 = Math.max(x0, left)
+        x1 = Math.min(x1, right)
+        const status = stripStatus(frame)
+        ctx.fillStyle = STRIP_COLORS[status]
+        ctx.fillRect(x0, yTop, Math.max(x1 - x0, 2 * dpr), stripHeight)
+        if (frame.index === selectedRef.current) {
+          ctx.strokeStyle = '#1a1d21'
+          ctx.lineWidth = 2 * dpr
+          ctx.strokeRect(x0, yTop, Math.max(x1 - x0, 2 * dpr), stripHeight)
+        }
+        const label = frameIdLabel(frame)
+        if (ctx.measureText(label).width <= x1 - x0 - 6 * dpr) {
+          ctx.fillStyle = '#ffffff'
+          ctx.fillText(label, (x0 + x1) / 2, yTop + stripHeight / 2)
+        }
+      }
+      ctx.restore()
+    }
+
     const options: uPlot.Options = {
       width: container.clientWidth || 800,
       height: 320,
@@ -166,7 +227,9 @@ export function WaveformChart({
       cursor: { drag: { x: true, y: false } },
       scales: { x: { time: false } },
       axes: [
-        { label: `时间 (ms)` },
+        // Extra gap keeps room for the frame strip between the axis
+        // line and the tick numbers.
+        { label: `时间 (ms)`, gap: 26 },
         { label: `电压 (${unit})` },
       ],
       series: [
@@ -184,11 +247,31 @@ export function WaveformChart({
       ],
       hooks: {
         drawClear: [drawOverlays],
-        draw: [drawDigital],
+        draw: [drawDigital, drawFrameStrip],
         ready: [
           (u: uPlot) => {
             u.over?.addEventListener('click', (event: MouseEvent) => {
               const rect = u.over.getBoundingClientRect()
+              const xVal = u.posToVal(event.clientX - rect.left, 'x')
+              const hit = framesRef.current.find(
+                (frame) =>
+                  toMs(frame.startSample) <= xVal &&
+                  xVal <= toMs(frame.endSample),
+              )
+              if (hit) onSelectRef.current(hit.index)
+            })
+            // Clicks on the frame strip (below the plot area) also select.
+            u.root.addEventListener('click', (event: MouseEvent) => {
+              const rect = u.over.getBoundingClientRect()
+              if (
+                event.clientY <= rect.bottom ||
+                event.clientY >
+                  rect.bottom + STRIP_TOP_CSS + STRIP_HEIGHT_CSS + 4 ||
+                event.clientX < rect.left ||
+                event.clientX > rect.right
+              ) {
+                return
+              }
               const xVal = u.posToVal(event.clientX - rect.left, 'x')
               const hit = framesRef.current.find(
                 (frame) =>
@@ -247,7 +330,12 @@ export function WaveformChart({
           重置缩放
         </button>
         <p className="waveform-hint">
-          拖动框选可缩放；点击帧覆盖区可在表格中定位对应帧。
+          拖动框选可缩放；点击帧覆盖区或轴下帧色块可在表格中定位对应帧。
+        </p>
+        <p className="frame-timeline-legend">
+          <span className="legend-swatch ack" aria-hidden="true" /> 已应答
+          <span className="legend-swatch noack" aria-hidden="true" /> 无应答
+          <span className="legend-swatch error" aria-hidden="true" /> 错误
         </p>
       </div>
       <div ref={containerRef} className="waveform-container" />

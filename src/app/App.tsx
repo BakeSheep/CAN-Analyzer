@@ -5,7 +5,6 @@ import { ErrorBanner } from '../components/ErrorBanner'
 import { FileSummary } from '../components/FileSummary'
 import { FrameDetails } from '../components/FrameDetails'
 import { FrameTable } from '../components/FrameTable'
-import { FrameTimeline } from '../components/FrameTimeline'
 import { WaveformChart } from '../components/WaveformChart'
 import { framesToCsv, framesToJson } from '../core/exporters'
 import type { AnalysisResult } from '../core/types'
@@ -258,13 +257,6 @@ export default function App() {
               unit={result.metadata.unit}
               threshold={result.settings.thresholdMv}
               levels={result.levels}
-            />
-            <FrameTimeline
-              frames={result.frames}
-              sampleCount={result.metadata.sampleCount}
-              sampleRateHz={result.metadata.sampleRateHz}
-              selectedIndex={selectedFrame}
-              onSelect={setSelectedFrame}
             />
             {result.errors.length > 0 && (
               <section aria-label="捕获级错误" className="capture-errors">

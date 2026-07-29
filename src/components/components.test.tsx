@@ -6,7 +6,7 @@ import { ErrorBanner } from './ErrorBanner'
 import { FileSummary } from './FileSummary'
 import { FrameDetails } from './FrameDetails'
 import { FrameTable } from './FrameTable'
-import { FrameTimeline } from './FrameTimeline'
+import { WaveformChart } from './WaveformChart'
 import type { AnalysisResult, CanFrame } from '../core/types'
 
 vi.mock('uplot', () => ({
@@ -338,116 +338,45 @@ describe('ErrorBanner', () => {
   })
 })
 
-describe('FrameTimeline', () => {
-  const frames = [
-    makeFrame(), // acknowledged, valid → green
-    makeFrame({
-      index: 1,
-      idHex: '456',
-      startSample: 3000,
-      endSample: 4000,
-      acknowledged: false, // valid but no ACK → blue
-    }),
-    makeFrame({
-      index: 2,
-      idHex: '789',
-      startSample: 5000,
-      endSample: 6000,
-      crcValid: false, // → red
-    }),
-  ]
+describe('WaveformChart', () => {
+  const overview = {
+    bucketStart: new Int32Array([0, 100]),
+    min: new Float32Array([-2200, 0]),
+    max: new Float32Array([0, 10]),
+    bucketSize: 100,
+    sampleCount: 200,
+  }
+  const digital = {
+    transitions: new Int32Array([0]),
+    initialHigh: true,
+    sampleCount: 200,
+  }
 
-  it('colors blocks by ACK/error status', () => {
-    render(
-      <FrameTimeline
-        frames={frames}
-        sampleCount={10_000}
-        sampleRateHz={50_000_000}
+  function renderChart() {
+    return render(
+      <WaveformChart
+        overview={overview}
+        digital={digital}
+        frames={[makeFrame()]}
         selectedIndex={null}
-        onSelect={() => {}}
+        onSelectFrame={() => {}}
+        sampleRateHz={50_000_000}
+        unit="mV"
+        threshold={-1100}
+        levels={makeResult().levels}
       />,
     )
-    expect(screen.getByRole('button', { name: /帧 0.*已应答/ }).className).toMatch(
-      /\back\b/,
-    )
-    expect(screen.getByRole('button', { name: /帧 1.*无应答/ }).className).toMatch(
-      /\bnoack\b/,
-    )
-    expect(screen.getByRole('button', { name: /帧 2.*错误/ }).className).toMatch(
-      /\berror\b/,
-    )
-  })
+  }
 
-  it('renders time tick labels in milliseconds', () => {
-    render(
-      <FrameTimeline
-        frames={frames}
-        sampleCount={10_000}
-        sampleRateHz={50_000_000}
-        selectedIndex={null}
-        onSelect={() => {}}
-      />,
-    )
-    // 10,000 samples @ 50 MHz = 0.2 ms total; first and last ticks.
-    expect(screen.getByText('0.000 ms')).toBeInTheDocument()
-    expect(screen.getByText('0.200 ms')).toBeInTheDocument()
-  })
-
-  it('shows 0x-prefixed frame IDs aligned on the axis between line and ticks', () => {
-    render(
-      <FrameTimeline
-        frames={frames}
-        sampleCount={10_000}
-        sampleRateHz={50_000_000}
-        selectedIndex={null}
-        onSelect={() => {}}
-      />,
-    )
-    const id = screen.getByText('0x456')
-    expect(id).toBeInTheDocument()
-    // Center of frame 1 (3000..4000 of 10000) → 35% along the axis.
-    expect(id).toHaveStyle({ left: '35%' })
-    expect(screen.getByText('0x123')).toBeInTheDocument()
-    expect(screen.getByText('0x789')).toBeInTheDocument()
-  })
-
-  it('selects a frame on click and marks the selection', async () => {
-    const onSelect = vi.fn()
-    const { rerender } = render(
-      <FrameTimeline
-        frames={frames}
-        sampleCount={10_000}
-        sampleRateHz={50_000_000}
-        selectedIndex={null}
-        onSelect={onSelect}
-      />,
-    )
-    await userEvent.click(screen.getByRole('button', { name: /帧 1/ }))
-    expect(onSelect).toHaveBeenCalledWith(1)
-    rerender(
-      <FrameTimeline
-        frames={frames}
-        sampleCount={10_000}
-        sampleRateHz={50_000_000}
-        selectedIndex={1}
-        onSelect={onSelect}
-      />,
-    )
+  it('renders the zoom reset control', () => {
+    renderChart()
     expect(
-      screen.getByRole('button', { name: /帧 1/ }).className,
-    ).toMatch(/selected/)
+      screen.getByRole('button', { name: /重置缩放/ }),
+    ).toBeInTheDocument()
   })
 
-  it('shows a text legend so status is not conveyed by color alone', () => {
-    render(
-      <FrameTimeline
-        frames={frames}
-        sampleCount={10_000}
-        sampleRateHz={50_000_000}
-        selectedIndex={null}
-        onSelect={() => {}}
-      />,
-    )
+  it('shows the frame status legend (green/blue/red not color-only)', () => {
+    renderChart()
     expect(screen.getByText(/已应答/)).toBeInTheDocument()
     expect(screen.getByText(/无应答/)).toBeInTheDocument()
     expect(screen.getByText(/错误/)).toBeInTheDocument()
