@@ -117,7 +117,11 @@ describe('App shell', () => {
 
   it('states that analysis happens locally in the browser', () => {
     render(<App />)
-    expect(screen.getByText(/分析全部在本地浏览器完成/)).toBeInTheDocument()
+    // The header tagline was removed by design review; the privacy
+    // statement now lives in the drop zone.
+    expect(
+      screen.getByText(/文件仅在本地浏览器中解析，不会上传/),
+    ).toBeInTheDocument()
   })
 })
 

@@ -6,6 +6,7 @@ import { ErrorBanner } from './ErrorBanner'
 import { FileSummary } from './FileSummary'
 import { FrameDetails } from './FrameDetails'
 import { FrameTable } from './FrameTable'
+import { FrameTimeline } from './FrameTimeline'
 import type { AnalysisResult, CanFrame } from '../core/types'
 
 vi.mock('uplot', () => ({
@@ -334,5 +335,103 @@ describe('ErrorBanner', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('第 3 行')
     await userEvent.click(screen.getByRole('button', { name: /关闭/ }))
     expect(onDismiss).toHaveBeenCalled()
+  })
+})
+
+describe('FrameTimeline', () => {
+  const frames = [
+    makeFrame(), // acknowledged, valid → green
+    makeFrame({
+      index: 1,
+      idHex: '456',
+      startSample: 3000,
+      endSample: 4000,
+      acknowledged: false, // valid but no ACK → blue
+    }),
+    makeFrame({
+      index: 2,
+      idHex: '789',
+      startSample: 5000,
+      endSample: 6000,
+      crcValid: false, // → red
+    }),
+  ]
+
+  it('colors blocks by ACK/error status', () => {
+    render(
+      <FrameTimeline
+        frames={frames}
+        sampleCount={10_000}
+        sampleRateHz={50_000_000}
+        selectedIndex={null}
+        onSelect={() => {}}
+      />,
+    )
+    expect(screen.getByRole('button', { name: /帧 0.*已应答/ }).className).toMatch(
+      /\back\b/,
+    )
+    expect(screen.getByRole('button', { name: /帧 1.*无应答/ }).className).toMatch(
+      /\bnoack\b/,
+    )
+    expect(screen.getByRole('button', { name: /帧 2.*错误/ }).className).toMatch(
+      /\berror\b/,
+    )
+  })
+
+  it('renders time tick labels in milliseconds', () => {
+    render(
+      <FrameTimeline
+        frames={frames}
+        sampleCount={10_000}
+        sampleRateHz={50_000_000}
+        selectedIndex={null}
+        onSelect={() => {}}
+      />,
+    )
+    // 10,000 samples @ 50 MHz = 0.2 ms total; first and last ticks.
+    expect(screen.getByText('0.000 ms')).toBeInTheDocument()
+    expect(screen.getByText('0.200 ms')).toBeInTheDocument()
+  })
+
+  it('selects a frame on click and marks the selection', async () => {
+    const onSelect = vi.fn()
+    const { rerender } = render(
+      <FrameTimeline
+        frames={frames}
+        sampleCount={10_000}
+        sampleRateHz={50_000_000}
+        selectedIndex={null}
+        onSelect={onSelect}
+      />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: /帧 1/ }))
+    expect(onSelect).toHaveBeenCalledWith(1)
+    rerender(
+      <FrameTimeline
+        frames={frames}
+        sampleCount={10_000}
+        sampleRateHz={50_000_000}
+        selectedIndex={1}
+        onSelect={onSelect}
+      />,
+    )
+    expect(
+      screen.getByRole('button', { name: /帧 1/ }).className,
+    ).toMatch(/selected/)
+  })
+
+  it('shows a text legend so status is not conveyed by color alone', () => {
+    render(
+      <FrameTimeline
+        frames={frames}
+        sampleCount={10_000}
+        sampleRateHz={50_000_000}
+        selectedIndex={null}
+        onSelect={() => {}}
+      />,
+    )
+    expect(screen.getByText(/已应答/)).toBeInTheDocument()
+    expect(screen.getByText(/无应答/)).toBeInTheDocument()
+    expect(screen.getByText(/错误/)).toBeInTheDocument()
   })
 })

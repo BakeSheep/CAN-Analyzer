@@ -13,7 +13,9 @@
   --color-warning-bg: #fdf3d7;
   --color-ok: #1a6b3c;
   --focus-ring: 2px solid #0b5fa5;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  /* DIN-flavored technical faces shipped with Windows/macOS; no webfont
+     downloads so the “nothing leaves the browser” promise stays intact. */
+  font-family: 'Bahnschrift', 'DIN Alternate', 'Segoe UI', system-ui, sans-serif;
 }
 
 * {
@@ -27,7 +29,11 @@ body {
 }
 
 body {
-  background: var(--color-bg);
+  background:
+    linear-gradient(rgba(11, 95, 165, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 95, 165, 0.025) 1px, transparent 1px),
+    var(--color-bg);
+  background-size: 24px 24px, 24px 24px, auto;
   color: var(--color-text);
   line-height: 1.5;
 }
@@ -66,12 +72,18 @@ body {
 .app-header h1 {
   font-size: 1.25rem;
   margin: 0;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.app-header .privacy-note {
-  color: var(--color-text-muted);
-  font-size: 0.85rem;
-  margin: 0;
+.app-header h1::before {
+  content: '';
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  margin-right: 0.5em;
+  background: var(--color-accent);
+  clip-path: polygon(0 100%, 25% 100%, 25% 0, 75% 0, 75% 100%, 100% 100%);
 }
 
 .app-main {
@@ -91,7 +103,7 @@ body {
 }
 
 .mono {
-  font-family: Consolas, 'Courier New', monospace;
+  font-family: 'Cascadia Mono', Consolas, 'Courier New', monospace;
 }
 
 /* --- Import area ------------------------------------------------ */
@@ -99,7 +111,13 @@ body {
   background: var(--color-surface);
   border: 2px dashed var(--color-border);
   border-radius: 8px;
-  padding: 1.25rem;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
   text-align: center;
 }
 
@@ -121,7 +139,7 @@ body {
 
 .file-label {
   display: inline-block;
-  margin: 0.5rem 0;
+  margin: 0;
   padding: 0.5rem 1.25rem;
   background: var(--color-accent);
   color: var(--color-accent-contrast);
@@ -293,20 +311,135 @@ button:disabled {
   min-height: 320px;
 }
 
-/* --- Frames ------------------------------------------------------- */
-.export-toolbar {
-  display: flex;
-  gap: 0.75rem;
+/* --- Frame timeline -------------------------------------------------- */
+.frame-timeline {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem 0.5rem;
 }
 
-.export-toolbar button {
-  padding: 0.45rem 1rem;
+.frame-timeline-track {
+  position: relative;
+  height: 34px;
+  background: #eef1f5;
+  border-bottom: 2px solid var(--color-text);
+  overflow: hidden;
+}
+
+.frame-timeline-block {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  min-width: 4px;
+  border: none;
+  border-radius: 2px;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 0.7rem;
+  line-height: 26px;
+}
+
+.frame-timeline-block.ack {
+  background: var(--color-ok);
+}
+
+.frame-timeline-block.noack {
+  background: var(--color-accent);
+}
+
+.frame-timeline-block.error {
+  background: var(--color-danger);
+}
+
+.frame-timeline-block.selected {
+  outline: 2px solid var(--color-text);
+  outline-offset: 1px;
+}
+
+.frame-timeline-id {
+  display: block;
+  padding: 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: 'Cascadia Mono', Consolas, monospace;
+}
+
+.frame-timeline-axis {
+  position: relative;
+  height: 1.2rem;
+  margin-top: 2px;
+}
+
+.frame-timeline-tick {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  white-space: nowrap;
+}
+
+.frame-timeline-tick:first-child {
+  transform: none;
+}
+
+.frame-timeline-tick:last-child {
+  transform: translateX(-100%);
+}
+
+.frame-timeline-legend {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 2px;
+  margin-left: 0.6rem;
+}
+
+.legend-swatch:first-child {
+  margin-left: 0;
+}
+
+.legend-swatch.ack {
+  background: var(--color-ok);
+}
+
+.legend-swatch.noack {
+  background: var(--color-accent);
+}
+
+.legend-swatch.error {
+  background: var(--color-danger);
+}
+
+/* --- Frames ------------------------------------------------------- */
+.frame-table-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.frame-table-actions button {
+  padding: 0.4rem 0.9rem;
   background: var(--color-surface);
   color: var(--color-accent);
   border: 1px solid var(--color-accent);
   border-radius: 4px;
   cursor: pointer;
   font: inherit;
+  font-size: 0.85rem;
 }
 
 .inspect-split {

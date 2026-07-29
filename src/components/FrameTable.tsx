@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { CanFrame } from '../core/types'
 
 interface FrameTableProps {
@@ -7,6 +7,8 @@ interface FrameTableProps {
   onSelect: (index: number) => void
   /** For displaying start times; defaults to 1 (raw sample indexes). */
   sampleRateHz?: number
+  /** Extra toolbar content (e.g. export buttons), top-right of the card. */
+  actions?: ReactNode
 }
 
 export function frameStatus(frame: CanFrame): 'ok' | 'error' {
@@ -25,6 +27,7 @@ export function FrameTable({
   selectedIndex,
   onSelect,
   sampleRateHz = 1,
+  actions,
 }: FrameTableProps) {
   const [idFilter, setIdFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'ok' | 'error'>(
@@ -72,6 +75,9 @@ export function FrameTable({
         <p className="frame-table-count">
           {visible.length} / {frames.length} 帧
         </p>
+        {actions !== undefined && (
+          <div className="frame-table-actions">{actions}</div>
+        )}
       </div>
       {visible.length === 0 ? (
         <p className="frame-table-empty">

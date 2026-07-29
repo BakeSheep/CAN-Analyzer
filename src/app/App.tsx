@@ -5,6 +5,7 @@ import { ErrorBanner } from '../components/ErrorBanner'
 import { FileSummary } from '../components/FileSummary'
 import { FrameDetails } from '../components/FrameDetails'
 import { FrameTable } from '../components/FrameTable'
+import { FrameTimeline } from '../components/FrameTimeline'
 import { WaveformChart } from '../components/WaveformChart'
 import { framesToCsv, framesToJson } from '../core/exporters'
 import type { AnalysisResult } from '../core/types'
@@ -193,9 +194,6 @@ export default function App() {
     <>
       <header className="app-header">
         <h1>CAN Waveform Analyzer</h1>
-        <p className="privacy-note">
-          导入示波器 CSV，检测比特率并解码 Classic CAN 帧。分析全部在本地浏览器完成，数据不会上传。
-        </p>
       </header>
       <main className="app-main">
         <section aria-label="导入与状态" className="import-section">
@@ -240,6 +238,13 @@ export default function App() {
               threshold={result.settings.thresholdMv}
               levels={result.levels}
             />
+            <FrameTimeline
+              frames={result.frames}
+              sampleCount={result.metadata.sampleCount}
+              sampleRateHz={result.metadata.sampleRateHz}
+              selectedIndex={selectedFrame}
+              onSelect={setSelectedFrame}
+            />
             {result.errors.length > 0 && (
               <section aria-label="捕获级错误" className="capture-errors">
                 <h3>捕获级错误</h3>
@@ -254,22 +259,32 @@ export default function App() {
                 </ul>
               </section>
             )}
-            <section aria-label="导出" className="export-toolbar">
-              {/* Export is only rendered after a successful analysis; the
-                  labels state explicitly that ALL frames are exported. */}
-              <button type="button" onClick={exportJson} disabled={loading !== null}>
-                导出全部帧 JSON
-              </button>
-              <button type="button" onClick={exportCsv} disabled={loading !== null}>
-                导出全部帧 CSV
-              </button>
-            </section>
             <div className="inspect-split">
               <FrameTable
                 frames={result.frames}
                 selectedIndex={selectedFrame}
                 onSelect={setSelectedFrame}
                 sampleRateHz={result.metadata.sampleRateHz}
+                actions={
+                  <>
+                    {/* Export lives in the frame card's top-right corner;
+                        labels state explicitly that ALL frames export. */}
+                    <button
+                      type="button"
+                      onClick={exportJson}
+                      disabled={loading !== null}
+                    >
+                      导出全部帧 JSON
+                    </button>
+                    <button
+                      type="button"
+                      onClick={exportCsv}
+                      disabled={loading !== null}
+                    >
+                      导出全部帧 CSV
+                    </button>
+                  </>
+                }
               />
               <FrameDetails
                 frame={
