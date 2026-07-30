@@ -37,8 +37,11 @@ class TruncatedFrame extends Error {
  * Decode Classic CAN 2.0A/2.0B frames from a quantized signal.
  *
  * A frame decode starts at a recessive→dominant edge preceded by at least
- * seven recessive bit times. Validation problems (CRC, delimiters, EOF,
- * DLC) are recorded on the frame; framing violations (stuffing,
+ * seven recessive bit times. The capture start is special: preceding idle
+ * cannot be observed there (a trigger may fire right at a SOF), so the
+ * first dominant region is tried speculatively and kept only when it
+ * decodes into a fully valid frame. Validation problems (CRC, delimiters,
+ * EOF, DLC) are recorded on the frame; framing violations (stuffing,
  * truncation) become capture-level errors and decoding resumes at the
  * next plausible idle/SOF boundary.
  */
@@ -68,6 +71,22 @@ export function decodeCanFrames(
     return invert ? ((1 - level) as 0 | 1) : level
   }
 
+  /**
+   * SOF candidate at the capture start, where preceding idle cannot be
+   * observed: either the capture begins dominant, or the leading recessive
+   * run is shorter than the required idle. Returns null when the regular
+   * idle-based search already covers the capture start.
+   */
+  const findCaptureStartSof = (): number | null => {
+    if (transitions.length === 0 || sampleCount === 0) return null
+    if (levelAt(0) === 0) return 0 // capture begins mid-SOF/dominant
+    // Leading recessive run (transitions[0] is always 0).
+    const runEnd = transitions.length > 1 ? transitions[1] : sampleCount
+    if (runEnd >= sampleCount) return null // no dominant region follows
+    if (runEnd >= IDLE_BITS_BEFORE_SOF * samplesPerBit) return null
+    return runEnd
+  }
+
   /** Sample index of the next SOF edge at/after `fromSample`, or null. */
   const findNextSof = (fromSample: number): number | null => {
     const idleSamples = IDLE_BITS_BEFORE_SOF * samplesPerBit
@@ -90,6 +109,28 @@ export function decodeCanFrames(
   const errors: DecodeError[] = []
   let searchPos = 0
   let frameIndex = 0
+
+  // Speculative decode at the capture start: without idle evidence this
+  // is only a guess, so junk (a truncated frame or noise) is discarded
+  // silently and only a fully valid frame is kept.
+  const startSof = findCaptureStartSof()
+  if (startSof !== null) {
+    try {
+      const frame = decodeOneFrame(startSof, frameIndex)
+      if (frame.crcValid && frame.errors.length === 0) {
+        frames.push(frame)
+        frameIndex += 1
+        searchPos = Math.max(frame.endSample, startSof + 1)
+      }
+    } catch (error) {
+      if (
+        !(error instanceof StuffBitError) &&
+        !(error instanceof TruncatedFrame)
+      ) {
+        throw error
+      }
+    }
+  }
 
   while (searchPos < sampleCount) {
     const sof = findNextSof(searchPos)

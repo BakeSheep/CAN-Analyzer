@@ -180,6 +180,56 @@ describe('decodeCanFrames', () => {
     expect(frames[0].id).toBe(0x55)
   })
 
+  it('decodes a frame whose SOF has less than one idle bit before it', () => {
+    // Like a scope trigger firing right at the frame: only 1 recessive bit
+    // precedes the SOF, far below the 7-bit idle requirement.
+    const bits = encodeFrameBits({
+      id: 0x100,
+      extended: true,
+      data: [0xf3, 0xab, 0x01, 0x00, 0x6b],
+    })
+    const { frames, errors } = decodeCanFrames(signalFromBits(bits, 1), {
+      samplesPerBit: SPB,
+    })
+    expect(errors).toHaveLength(0)
+    expect(frames).toHaveLength(1)
+    expect(frames[0].id).toBe(0x100)
+    expect(frames[0].format).toBe('extended')
+    expect(Array.from(frames[0].data)).toEqual([0xf3, 0xab, 0x01, 0x00, 0x6b])
+    expect(frames[0].crcValid).toBe(true)
+  })
+
+  it('decodes a frame whose SOF sits exactly at the capture start', () => {
+    const bits = encodeFrameBits({ id: 0x2b, data: [0x7f] })
+    const { frames, errors } = decodeCanFrames(signalFromBits(bits, 0), {
+      samplesPerBit: SPB,
+    })
+    expect(errors).toHaveLength(0)
+    expect(frames).toHaveLength(1)
+    expect(frames[0].id).toBe(0x2b)
+    expect(frames[0].crcValid).toBe(true)
+  })
+
+  it('still decodes later frames after a rejected capture-start guess', () => {
+    // Capture begins mid-frame: the tail of a frame is junk that must not
+    // become a bogus frame, while the following full frame still decodes.
+    const junkTail = encodeFrameBits({ id: 0x5a5, data: [0x11, 0x22] }).slice(
+      30,
+    )
+    const good = encodeFrameBits({ id: 0x321, data: [0x44] })
+    const stream = [
+      ...junkTail,
+      ...Array.from({ length: 12 }, () => 1 as const),
+      ...good,
+    ]
+    const { frames } = decodeCanFrames(signalFromBits(stream, 0), {
+      samplesPerBit: SPB,
+    })
+    expect(frames).toHaveLength(1)
+    expect(frames[0].id).toBe(0x321)
+    expect(frames[0].crcValid).toBe(true)
+  })
+
   it('reports a truncated final frame', () => {
     const bits = encodeFrameBits({ id: 0x100, data: [0x42] }).slice(0, 20)
     const { frames, errors } = decodeCanFrames(signalFromBits(bits, 12, 0), {
